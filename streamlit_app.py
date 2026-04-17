@@ -2,6 +2,7 @@ import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 import re
+import google.generativeai as genai
 
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Master of Ops Dialer", layout="centered")
