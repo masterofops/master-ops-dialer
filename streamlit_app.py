@@ -80,6 +80,12 @@ with col2:
     # Using a unique key per index so notes don't bleed into the next lead
     notes = st.text_area("Call Notes", key=f"notes_{st.session_state.index}")
 
+with col2:
+    st.markdown("### **Company Specs**")
+    st.write(f"🏭 **Industry:** {lead.get('Industry', '---')}")
+    st.write(f"👥 **Employees:** {lead.get('# Employees', '---')}")
+    st.write(f"💰 **Revenue:** {lead.get('Annual Revenue', '---')}")
+    
 # --- 5. SAVE & LOGGING ---
 st.divider()
 if st.button("✅ LOG CALL & NEXT LEAD", use_container_width=True):
