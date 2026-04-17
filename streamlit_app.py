@@ -9,9 +9,15 @@ st.set_page_config(page_title="Master of Ops", layout="centered")
 # Connection to Google Sheets
 conn = st.connection("gsheets", type=GSheetsConnection)
 
+# This defaults to the first tab (which should be your Leads tab).
+
 # 1. LOAD DATA
-df = conn.read()
-kpi_df = conn.read(worksheet="KPI_Goals")
+try:
+    df = conn.read()
+    st.success("Connection established.")
+except Exception as e:
+    st.error(f"Handshake failed: {e}")
+    st.info("Check if the Sheet URL in Secrets ends with /edit?usp=sharing")
 
 # Session State to keep track of where you are
 if 'index' not in st.session_state:
