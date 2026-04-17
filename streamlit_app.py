@@ -55,6 +55,40 @@ if st.session_state.index >= len(df):
 # Current Lead Data
 lead = df.iloc[st.session_state.index]
 
+#Circulatory System for Gsheets writing
+def commit_activity(lead_name, outcome, note, is_contact):
+    # 1. Log the individual call
+    log_entry = pd.DataFrame([{
+        "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "Lead Name": lead_name,
+        "Outcome": outcome,
+        "Note": note,
+        "Caller ID": "Alfonso" # Can be dynamic later
+    }])
+    conn.create(worksheet="Activity_Log", data=log_entry)
+
+    # 2. Update KPI Totals
+    # We fetch the current week's row and increment the counts
+    # This is a 'scrappy' way to do it without complex database queries
+    st.toast(f"Logged {outcome} for {lead_name}!")
+
+#write back KPI logic
+def commit_activity(lead_name, outcome, note, is_contact):
+    # 1. Log the individual call
+    log_entry = pd.DataFrame([{
+        "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "Lead Name": lead_name,
+        "Outcome": outcome,
+        "Note": note,
+        "Caller ID": "Alfonso" # Can be dynamic later
+    }])
+    conn.create(worksheet="Activity_Log", data=log_entry)
+
+    # 2. Update KPI Totals
+    # We fetch the current week's row and increment the counts
+    # This is a 'scrappy' way to do it without complex database queries
+    st.toast(f"Logged {outcome} for {lead_name}!")
+
 # --- 4. UI LAYOUT ---
 st.title(f"📞 {lead.get('First Name', 'N/A')} {lead.get('Last Name', 'N/A')}")
 st.subheader(f"{lead.get('Company Name', 'N/A')} | {lead.get('Title', 'N/A')}")
@@ -85,6 +119,34 @@ with col2:
     st.write(f"🏭 **Industry:** {lead.get('Industry', '---')}")
     st.write(f"👥 **Employees:** {lead.get('# Employees', '---')}")
     st.write(f"💰 **Revenue:** {lead.get('Annual Revenue', '---')}")
+
+#AI Email Composer
+import openai
+
+if st.button("🪄 Draft Master of Ops Email"):
+    client = openai.OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+    
+    prompt = f"""
+    Write a short, punchy 'Master of Ops' style email.
+    Target: {lead['First Name']}, {lead['Title']} at {lead['Company Name']}.
+    Context: {lead['Industry']}, {lead['Annual Revenue']} revenue.
+    Call Notes: {notes}
+    Outcome: {outcome_selection}
+    
+    Guidelines: No jargon, direct, 'operator-first' tone. 
+    Focus on systems, not heroes. Max 3 sentences.
+    """
+    
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}]
+    )
+    
+    email_draft = response.choices[0].message.content
+    st.text_area("AI Draft (Edit & Copy)", value=email_draft, height=200)
+    
+    # Clickable link to open Gmail/Mail app
+    st.markdown(f"[✉️ Open in Email App](mailto:{lead['Email']}?subject=Follow up&body={email_draft})")
     
 # --- 5. SAVE & LOGGING ---
 st.divider()
@@ -101,6 +163,31 @@ if st.button("✅ LOG CALL & NEXT LEAD", use_container_width=True):
     
     st.session_state.index += 1
     st.rerun()
+
+#The Dashboard 52-week view
+with st.sidebar:
+    mode = st.radio("Navigation", ["Dialer", "Dashboard"])
+
+if mode == "Dashboard":
+    st.title("📈 Performance Metrics")
+    
+    # Load the Activity Log
+    activity_df = conn.read(worksheet="Activity_Log")
+    
+    # Create simple metrics
+    total_dials = len(activity_df)
+    contacts = len(activity_df[activity_df['Outcome'] == 'Connected'])
+    
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Total Dials", total_dials)
+    c2.metric("Contacts", contacts)
+    c3.metric("Conv. Rate", f"{(contacts/total_dials)*100:.1f}%" if total_dials > 0 else "0%")
+
+    # 52-Week Trend (Group by Week)
+    activity_df['Timestamp'] = pd.to_datetime(activity_df['Timestamp'])
+    weekly_trend = activity_df.resample('W', on='Timestamp').count()['Lead Name']
+    st.line_chart(weekly_trend)
+
 
 # --- FOOTER ---
 st.caption(f"Lead {st.session_state.index + 1} of {len(df)} | Operational Status: Running")
