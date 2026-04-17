@@ -10,7 +10,7 @@ st.set_page_config(page_title="Master of Ops", layout="centered")
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 # 1. LOAD DATA
-df = conn.read(worksheet="Leads")
+df = conn.read()
 kpi_df = conn.read(worksheet="KPI_Goals")
 
 # Session State to keep track of where you are
