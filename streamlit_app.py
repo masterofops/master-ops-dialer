@@ -16,7 +16,7 @@ if 'index' not in st.session_state:
 # --- 2. LOAD DATA ---
 try:
     # Pulling data from the 'Leads' tab
-    df = conn.read(worksheet="Leads")
+    df = conn.read()
     
     if df.empty:
         st.warning("The 'Leads' tab is empty. Please add data to your Google Sheet.")
