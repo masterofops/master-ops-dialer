@@ -310,14 +310,14 @@ if mode == "Dialer":
         if pd.notna(email_val) and "@" in str(email_val):
             st.link_button("✉️ DESKTOP MAIL", f"mailto:{email_val}", use_container_width=True)
             
-            if st.button("📅 SCHEDULE G-CAL", use_container_width=True):
-                subject = urllib.parse.quote(f"Clarity Call: Master of Ops x {lead.get(col_comp, 'Lead')}")
-                details = urllib.parse.quote(f"Meeting with {full_name}\nEmail: {email_val}\nNotes: {lead.get(col_notes, '')}")
-                gcal_link = f"https://www.google.com/calendar/render?action=TEMPLATE&text={subject}&details={details}"
-                if pd.notna(email_val):
-                    gcal_link += f"&add={email_val}"
-                st.components.v1.html(f"<script>window.open('{gcal_link}', '_blank');</script>", height=0)
-                log_action("G-Cal Invite Prepared", step=0)
+            # Create Google Calendar Link (30 min default)
+            gcal_link = f"https://www.google.com/calendar/render?action=TEMPLATE&text={subject}&details={details}"
+            if pd.notna(email_val):
+                gcal_link += f"&add={email_val}"
+            
+            # Use link_button instead of st.components to avoid pop-up blockers
+            st.link_button("📅 SCHEDULE G-CAL", gcal_link, use_container_width=True)
+            
         else:
             st.error("No email found")
 
