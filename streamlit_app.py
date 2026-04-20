@@ -289,7 +289,7 @@ if mode == "Dialer":
             if st.button("✉️ DESKTOP MAIL", key=f"desk_{st.session_state.index}", use_container_width=True):
                 log_action("Email Sent (Local)", step=0)
                 
-                if st.button("🌐 GMAIL WEB", key=f"gmail_{st.session_state.index}", use_container_width=True):
+            if st.button("🌐 GMAIL WEB", key=f"gmail_{st.session_state.index}", use_container_width=True):
                 gmail_url = f"https://mail.google.com/mail/?view=cm&fs=1&to={email_val}"
                 # Trigger window open BEFORE the slow Sheets update
                 st.components.v1.html(f"<script>window.open('{gmail_url}', '_blank');</script>", height=0)
