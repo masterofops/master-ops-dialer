@@ -74,20 +74,40 @@ with st.sidebar:
         st.session_state.index = len(df) - 1
         st.rerun()
 
-    st.divider()
+ st.divider()
     st.subheader("📤 Lead Enrichment")
+    
+    # Option 1: File Upload
     uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
-    if uploaded_file:
-        try:
-            new_data = pd.read_csv(uploaded_file, encoding='latin1', on_bad_lines='skip', low_memory=False)
-            if st.button("Append & Enrich Database"):
-                updated_df = pd.concat([df, new_data], axis=0, ignore_index=True)
-                if col_email in updated_df.columns:
-                    updated_df = updated_df.drop_duplicates(subset=[col_email], keep='first')
-                conn.update(data=updated_df)
-                st.success(f"Database Expanded! New Total: {len(updated_df)}")
-                st.cache_data.clear()
-                st.rerun()
+    
+    # Option 2: Copy-Paste Contacts
+    pasted_data = st.text_area("Or paste emails here (one per line):")
+
+    if st.button("Add to Master List"):
+        new_entries = pd.DataFrame()
+        
+        if uploaded_file:
+            new_entries = pd.read_csv(uploaded_file, encoding='latin1', on_bad_lines='skip')
+        elif pasted_data:
+            emails = [e.strip() for e in pasted_data.split('\n') if '@' in e]
+            new_entries = pd.DataFrame({col_email: emails})
+
+        if not new_entries.empty:
+            # CLEANING: Ensure we don't create "Random Columns"
+            # Only keep columns that already exist in your Master Sheet
+            new_entries = new_entries[new_entries.columns.intersection(df.columns)]
+            
+            # COMBINE: Use 'concat' and then drop duplicates based on Email
+            updated_df = pd.concat([df, new_entries], ignore_index=True)
+            if col_email in updated_df.columns:
+                updated_df = updated_df.drop_duplicates(subset=[col_email], keep='first')
+            
+            # SAVE: Update the entire data frame safely
+            conn.update(data=updated_df)
+            st.success("List Updated & Synced!")
+            st.cache_data.clear()
+            st.rerun()
+            
         except Exception as e:
             st.error(f"Upload Error: {e}")
 # --- MODE: DIALER ---
@@ -153,11 +173,14 @@ if mode == "Dialer":
         st.session_state.index += move
         st.rerun()
 
-    # --- ACTION BUTTONS (Aligned with def log_action) ---
+    # --- ACTION BUTTONS ---
     st.write("---")
     cx, cy = st.columns(2)
+    
+    # Improved Link Triggers
     if cx.button("🔵 Log LinkedIn Message", use_container_width=True):
         log_action("LinkedIn Sent", step=0)
+    
     if cy.button("📧 Log Manual Email", use_container_width=True):
         log_action("Email Sent", step=0)
     
@@ -169,29 +192,31 @@ if mode == "Dialer":
             if st.session_state.index > 0:
                 st.session_state.index -= 1
                 st.rerun()
-            else:
-                st.toast("⚠️ You are at the first lead.")
-                
+
     with c2:
         if st.button("✅ LOG & NEXT", type="primary", use_container_width=True):
             log_action("Contact Made" if contact_made else "Outbound Call")
-            
+
     with c3:
-        cal_url = f"https://www.google.com/calendar/render?action=TEMPLATE&text={urllib.parse.quote('Appt: ' + full_name)}"
         if st.button("📅 APPOINTMENT", use_container_width=True):
             log_action("Appointment Scheduled", step=0)
-            st.markdown(f'<meta http-equiv="refresh" content="0;URL=\'{cal_url}\' \">', unsafe_allow_html=True)
-            
+            cal_link = f"https://www.google.com/calendar/render?action=TEMPLATE&text={urllib.parse.quote('Appt: ' + full_name)}"
+            # NEW TRIGGER: Uses JS to ensure the browser actually opens the tab
+            st.components.v1.html(f"<script>window.open('{cal_link}', '_blank');</script>", height=0)
+
     with c4:
         if st.button("💸 CLOSED", use_container_width=True):
             st.balloons()
             log_action("Closed Deal")
-            
+
     with c5:
-        email_addr = lead.get(col_email, '')
         if st.button("✉️ EMAIL", use_container_width=True):
             log_action("Email Sent", step=0)
-            st.markdown(f'<meta http-equiv="refresh" content="0;URL=\'mailto:{email_addr}\' \">', unsafe_allow_html=True)
+            email_val = lead.get(col_email, '')
+            if pd.notna(email_val):
+                mailto_link = f"mailto:{email_val}"
+                # NEW TRIGGER: JS trigger for mailto
+                st.components.v1.html(f"<script>window.location.href = '{mailto_link}';</script>", height=0)
 
 # --- MODE: DASHBOARD ---
 elif mode == "Dashboard":
