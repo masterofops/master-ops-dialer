@@ -84,32 +84,34 @@ with st.sidebar:
     pasted_data = st.text_area("Or paste emails here (one per line):")
 
     if st.button("Add to Master List"):
-        new_entries = pd.DataFrame()
-        
-        if uploaded_file:
-            new_entries = pd.read_csv(uploaded_file, encoding='latin1', on_bad_lines='skip')
-        elif pasted_data:
-            emails = [e.strip() for e in pasted_data.split('\n') if '@' in e]
-            new_entries = pd.DataFrame({col_email: emails})
+        # We wrap the logic in a TRY block to catch errors
+        try:
+            new_entries = pd.DataFrame()
+            
+            if uploaded_file:
+                new_entries = pd.read_csv(uploaded_file, encoding='latin1', on_bad_lines='skip')
+            elif pasted_data:
+                emails = [e.strip() for e in pasted_data.split('\n') if '@' in e]
+                new_entries = pd.DataFrame({col_email: emails})
 
-        if not new_entries.empty:
-            # CLEANING: Ensure we don't create "Random Columns"
-            # Only keep columns that already exist in your Master Sheet
-            new_entries = new_entries[new_entries.columns.intersection(df.columns)]
-            
-            # COMBINE: Use 'concat' and then drop duplicates based on Email
-            updated_df = pd.concat([df, new_entries], ignore_index=True)
-            if col_email in updated_df.columns:
-                updated_df = updated_df.drop_duplicates(subset=[col_email], keep='first')
-            
-            # SAVE: Update the entire data frame safely
-            conn.update(data=updated_df)
-            st.success("List Updated & Synced!")
-            st.cache_data.clear()
-            st.rerun()
-            
+            if not new_entries.empty:
+                # CLEANING: Only keep columns that exist in Master Sheet
+                new_entries = new_entries[new_entries.columns.intersection(df.columns)]
+                
+                # COMBINE: Append and drop duplicates
+                updated_df = pd.concat([df, new_entries], ignore_index=True)
+                if col_email in updated_df.columns:
+                    updated_df = updated_df.drop_duplicates(subset=[col_email], keep='first')
+                
+                # SAVE
+                conn.update(data=updated_df)
+                st.success("List Updated & Synced!")
+                st.cache_data.clear()
+                st.rerun()
+        # This EXCEPT now correctly matches the TRY above
         except Exception as e:
             st.error(f"Upload Error: {e}")
+            
 # --- MODE: DIALER ---
 if mode == "Dialer":
     if st.session_state.index >= len(df) or st.session_state.index < 0:
