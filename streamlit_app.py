@@ -183,7 +183,7 @@ with st.sidebar:
                 # 3. Clean up the new batch (remove empty rows)
                 new_batch = new_batch.dropna(how='all')
 
-              if not new_batch.empty:
+            if not new_batch.empty:
             if col_email and col_email in df.columns:
                 existing_emails = df[col_email].astype(str).str.lower().unique()
                 new_leads = new_batch[~new_batch[col_email].astype(str).str.lower().isin(existing_emails)]
