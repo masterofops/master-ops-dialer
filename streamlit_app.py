@@ -2,15 +2,14 @@ import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
 import re
-import google.generativeai as genai
-from datetime import datetime, timedelta
+from datetime import datetime
 import urllib.parse
 import time
 
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Master of Ops Dialer", layout="wide")
 
-# --- 1. CONNECTION & SESSION STATE ---
+# --- 1. CONNECTION ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 if 'index' not in st.session_state:
@@ -18,38 +17,35 @@ if 'index' not in st.session_state:
 if 'start_time' not in st.session_state:
     st.session_state.start_time = time.time()
 
-# --- 2. UTILITIES ---
+# --- 2. SMART PARSER (Aggressive Detection) ---
 def get_col(df, keywords):
     for col in df.columns:
         if any(key.lower() in str(col).lower() for key in keywords):
             return col
     return None
 
-def clean_phone(val):
-    if pd.isna(val) or val == "": return ""
-    return re.sub(r'\D', '', str(val))
-
-# --- 3. DATA LOAD (With Quota Protection) ---
+# --- 3. DATA LOAD (Quota Protected) ---
 try:
-    df = conn.read(ttl=300).copy()
+    # ttl=60 helps avoid the 429 "Quota Exceeded" error by not pinging Google every second
+    df = conn.read(ttl=60).copy()
     for c in df.columns: df[c] = df[c].astype(object)
     
     try:
-        activity_log = conn.read(worksheet="Activity_Log", ttl=300).copy()
+        activity_log = conn.read(worksheet="Activity_Log", ttl=60).copy()
     except:
         activity_log = pd.DataFrame(columns=["Timestamp", "Lead Name", "Outcome", "Rating", "Note", "User"])
 except Exception as e:
-    st.error(f"Sync Error: {e}")
+    st.error(f"Quota/Sync Error: {e}")
     st.stop()
 
-# Mapping
-col_first = get_col(df, ["first", "name"])
-col_last = get_col(df, ["last"])
-col_comp = get_col(df, ["company", "account"])
-col_phone = get_col(df, ["phone", "mobile", "tel"])
-col_email = get_col(df, ["email", "@"])
-col_notes = get_col(df, ["notes", "comment", "history"])
-col_li_person = get_col(df, ["linkedin", "profile"])
+# --- RE-MAPPING COLUMNS (More keywords for better parsing) ---
+col_first = get_col(df, ["first", "name", "nombre"])
+col_last = get_col(df, ["last", "apellido"])
+col_comp = get_col(df, ["company", "account", "empresa"])
+col_phone = get_col(df, ["phone", "mobile", "tel", "corporate phone", "personal phone"])
+col_email = get_col(df, ["email", "@", "correo"])
+col_notes = get_col(df, ["notes", "comment", "history", "notas"])
+col_li_person = get_col(df, ["linkedin", "profile", "person linkedin"])
 
 # --- SIDEBAR ---
 with st.sidebar:
@@ -57,46 +53,47 @@ with st.sidebar:
     mode = st.radio("Navigation", ["Dialer", "Dashboard", "Lead Manager"])
     
     st.divider()
-    # TIME TRACKER
-    elapsed = time.time() - st.session_state.start_time
-    st.metric("Session Time", f"{int(elapsed // 3600)}h {int((elapsed % 3600) // 60)}m")
-    
-    if st.button("🔄 Sync Sheets"):
-        st.cache_data.clear()
+    # START POSITION SELECTOR
+    new_start = st.number_input("Start at Lead #:", min_value=1, max_value=len(df), value=st.session_state.index + 1)
+    if st.button("Jump to Lead"):
+        st.session_state.index = int(new_start) - 1
         st.rerun()
 
-    st.subheader("📤 Upload Leads")
+    st.divider()
+    # UPLOADER (Fixed for Encoding and Appending)
+    st.subheader("📤 Add to List")
     uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
     if uploaded_file:
         try:
-            new_leads = pd.read_csv(uploaded_file)
-            if st.button("Confirm Upload"):
-                updated_df = pd.concat([df, new_leads], ignore_index=True)
-                conn.update(data=updated_df)
-                st.success("Leads Added!")
+            # latin1 handles special characters that 'utf-8' crashes on
+            new_data = pd.read_csv(uploaded_file, encoding='latin1')
+            if st.button("Enrich & Append List"):
+                # Append logic
+                combined_df = pd.concat([df, new_data], ignore_index=True).drop_duplicates(subset=[col_email] if col_email else None, keep='first')
+                conn.update(data=combined_df)
+                st.success(f"Added {len(new_data)} contacts without deleting previous.")
                 st.rerun()
         except Exception as e:
             st.error(f"Upload failed: {e}")
 
     st.divider()
-    if st.button("🏠 HOME (Lead 1)"):
+    if st.button("🏠 RESET TO 1"):
         st.session_state.index = 0
         st.rerun()
     
-    st.markdown(f"🔗 [Open Master Sheet](https://docs.google.com/spreadsheets/d/1YWt8gtPMQHCZQO91tl_I0iv592Q_yhPBR1SUdbIQP6g/)")
+    st.markdown(f"🔗 [Open Google Sheet](https://docs.google.com/spreadsheets/d/1YWt8gtPMQHCZQO91tl_I0iv592Q_yhPBR1SUdbIQP6g/)")
 
 # --- MODE: DIALER ---
 if mode == "Dialer":
-    if st.session_state.index >= len(df):
-        st.success("🏁 All leads processed!")
-        st.stop()
+    if st.session_state.index >= len(df) or st.session_state.index < 0:
+        st.session_state.index = 0 # Safety reset
 
     lead = df.iloc[st.session_state.index]
     orig_idx = lead.name
     full_name = f"{lead.get(col_first, '')} {lead.get(col_last, '')}"
     
     st.title(f"📞 {full_name}")
-    st.caption(f"Lead {st.session_state.index + 1} of {len(df)} | {lead.get(col_comp, 'N/A')}")
+    st.caption(f"Lead {st.session_state.index + 1} of {len(df)}")
 
     col_l, col_r = st.columns([1, 1])
 
@@ -104,20 +101,23 @@ if mode == "Dialer":
         st.markdown("### ⚡ Execution")
         phone_raw = lead.get(col_phone, '')
         if phone_raw:
-            st.link_button(f"📲 CALL: {phone_raw}", f"tel:{clean_phone(phone_raw)}", use_container_width=True, type="primary")
+            st.link_button(f"📲 CALL: {phone_raw}", f"tel:{re.sub(r'\D', '', str(phone_raw))}", use_container_width=True, type="primary")
+        else:
+            st.warning("No phone detected in this column.")
         
         contact_made = st.checkbox("👤 CONTACT MADE")
         rating = st.selectbox("Lead Rating", ["Cold", "Warm", "Hot"], index=1)
-        # Unique key per index ensures the box clears on move
-        new_note = st.text_area("New Call Note", key=f"note_input_{st.session_state.index}")
+        # Unique key prevents note carry-over
+        new_note = st.text_area("New Call Note", key=f"note_{st.session_state.index}")
 
     with col_r:
         st.markdown("### 🧠 Lead Intel")
         st.write(f"🌐 **Email:** {lead.get(col_email, 'N/A')}")
         st.write(f"👤 **LinkedIn:** [Profile]({lead.get(col_li_person, '#')})")
-        st.info(f"📋 **History:**\n\n {lead.get(col_notes, 'No history.')}")
+        st.info(f"📋 **Notes History:**\n\n {lead.get(col_notes, 'No history.')}")
 
-    def log_action(outcome, move_val=1):
+    # LOGGING ACTIONS
+    def log_action(outcome, move=1):
         ts = datetime.now().strftime("%m/%d %H:%M")
         old = str(lead.get(col_notes, "")) if not pd.isna(lead.get(col_notes)) else ""
         combined = f"[{ts}]: {new_note} | {old}"
@@ -135,7 +135,7 @@ if mode == "Dialer":
         except:
             conn.create(worksheet="Activity_Log", data=entry)
         
-        st.session_state.index += move_val
+        st.session_state.index += move
         st.rerun()
 
     st.divider()
@@ -143,18 +143,17 @@ if mode == "Dialer":
     
     with c1:
         if st.button("⬅️ PREVIOUS", use_container_width=True):
-            if st.session_state.index > 0:
-                st.session_state.index -= 1
-                st.rerun()
+            st.session_state.index -= 1
+            st.rerun()
 
     with c2:
         if st.button("✅ LOG & NEXT", type="primary", use_container_width=True):
             log_action("Contact Made" if contact_made else "Outbound Call")
 
     with c3:
-        cal_url = f"https://www.google.com/calendar/render?action=TEMPLATE&text={urllib.parse.quote('Follow up: ' + full_name)}"
+        cal_url = f"https://www.google.com/calendar/render?action=TEMPLATE&text={urllib.parse.quote('Appt: ' + full_name)}"
         if st.button("📅 APPOINTMENT", use_container_width=True):
-            log_action("Appointment Scheduled")
+            log_action("Appointment Scheduled", move=0) # Log but stay on page for redirect
             st.markdown(f'<meta http-equiv="refresh" content="0;URL=\'{cal_url}\' \">', unsafe_allow_html=True)
 
     with c4:
@@ -165,41 +164,17 @@ if mode == "Dialer":
     with c5:
         email_addr = lead.get(col_email, '')
         if st.button("✉️ EMAIL", use_container_width=True):
-            subj = urllib.parse.quote("Master of Ops - Follow up")
-            st.markdown(f'<meta http-equiv="refresh" content="0;URL=\'mailto:{email_addr}?subject={subj}\' \">', unsafe_allow_html=True)
+            st.markdown(f'<meta http-equiv="refresh" content="0;URL=\'mailto:{email_addr}\' \">', unsafe_allow_html=True)
 
-# --- MODE: DASHBOARD ---
+# --- DASHBOARD & LEAD MANAGER (RESTORED PREVIOUS WORKING LOGIC) ---
 elif mode == "Dashboard":
     st.title("📈 Performance Stats")
     if not activity_log.empty:
         activity_log['Timestamp'] = pd.to_datetime(activity_log['Timestamp'], errors='coerce')
-        
-        # Date Filter
-        start_date = st.date_input("Start Date", value=datetime.now() - timedelta(days=7))
-        end_date = st.date_input("End Date", value=datetime.now())
-        mask = (activity_log['Timestamp'].dt.date >= start_date) & (activity_log['Timestamp'].dt.date <= end_date)
-        filtered_log = activity_log.loc[mask]
+        st.metric("Total Dials", len(activity_log))
+        st.line_chart(activity_log.set_index('Timestamp').resample('D').count()['Lead Name'])
+        st.dataframe(activity_log.sort_values('Timestamp', ascending=False), use_container_width=True)
 
-        k1, k2, k3, k4 = st.columns(4)
-        k1.metric("Dials in Range", len(filtered_log))
-        k2.metric("Contacts", len(filtered_log[filtered_log['Outcome'] == 'Contact Made']))
-        k3.metric("Appointments", len(filtered_log[filtered_log['Outcome'] == 'Appointment Scheduled']))
-        k4.metric("Closed Deals", len(filtered_log[filtered_log['Outcome'] == 'Closed Deal']))
-        
-        st.subheader("Daily Execution Trend")
-        if not filtered_log.empty:
-            chart_data = filtered_log.set_index('Timestamp').resample('D').count()['Lead Name']
-            st.area_chart(chart_data)
-        
-        st.subheader("Activity History")
-        st.dataframe(filtered_log.sort_values('Timestamp', ascending=False), use_container_width=True)
-
-# --- MODE: LEAD MANAGER ---
 elif mode == "Lead Manager":
     st.title("🗂️ Lead Manager")
-    search = st.text_input("Search Leads (Name, Company, or Email)")
-    if search:
-        display_df = df[df.astype(str).apply(lambda x: x.str.contains(search, case=False)).any(axis=1)]
-    else:
-        display_df = df
-    st.dataframe(display_df, use_container_width=True)
+    st.dataframe(df, use_container_width=True)
