@@ -180,34 +180,34 @@ with st.sidebar:
                     if match:
                         new_batch[master_col] = raw_data[match]
 
-                # 3. Clean up the new batch (remove empty rows)
+               # 3. Clean up the new batch (remove empty rows)
                 new_batch = new_batch.dropna(how='all')
 
             if not new_batch.empty:
-            if col_email and col_email in df.columns:
-                existing_emails = df[col_email].astype(str).str.lower().unique()
-                new_leads = new_batch[~new_batch[col_email].astype(str).str.lower().isin(existing_emails)]
-            else:
-                new_leads = new_batch
+                if col_email and col_email in df.columns:
+                    existing_emails = df[col_email].astype(str).str.lower().unique()
+                    new_leads = new_batch[~new_batch[col_email].astype(str).str.lower().isin(existing_emails)]
+                else:
+                    new_leads = new_batch
 
-            if not new_leads.empty:
-                # Direct append to your existing dataframe
-                df = pd.concat([df, new_leads], ignore_index=True)
-                
-                # 5. Save and Reset
-                df = df.reset_index(drop=True)
-                conn.update(data=df)
-                
-                st.session_state.index = 0 
-                st.success(f"Successfully injected {len(new_leads)} leads into your Master Structure.")
-                st.cache_data.clear()
-                time.sleep(1)
-                st.rerun()
-            else:
-                st.warning("No new leads to add (all were duplicates).")
-    except Exception as e:
-        st.error(f"Injection Error: {e}")
-
+                if not new_leads.empty:
+                    # Direct append to your existing dataframe
+                    df = pd.concat([df, new_leads], ignore_index=True)
+                    
+                    # 5. Save and Reset
+                    df = df.reset_index(drop=True)
+                    conn.update(data=df)
+                    
+                    st.session_state.index = 0 
+                    st.success(f"Successfully injected {len(new_leads)} leads into your Master Structure.")
+                    st.cache_data.clear()
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.warning("No new leads to add (all were duplicates).")
+        except Exception as e:
+            st.error(f"Injection Error: {e}")
+            
     # 3. Execution (Priority Mapping)
     find_and_fill("First Name", ["executive 1 first name", "first name", "nombre"])
     find_and_fill("Last Name", ["executive 1 last name", "last name", "apellido"])                    
