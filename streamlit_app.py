@@ -35,14 +35,27 @@ except Exception as e:
     st.error(f"Sync Error: {e}")
     st.stop()
 
-# Re-mapping with higher sensitivity
-col_first = get_cols(df, ["first", "name", "nombre"])[0] if get_cols(df, ["first", "name"]) else None
-col_last = get_cols(df, ["last", "apellido"])[0] if get_cols(df, ["last", "apellido"]) else None
-col_comp = get_cols(df, ["company", "account", "empresa"])[0] if get_cols(df, ["company", "account"]) else None
-phone_cols = get_cols(df, ["phone", "mobile", "tel", "celular"])
-li_cols = get_cols(df, ["linkedin", "profile", "li-"])
-col_email = get_cols(df, ["email", "@", "correo"])[0] if get_cols(df, ["email", "@"]) else None
-col_notes = get_cols(df, ["notes", "comment", "history", "notas"])[0] if get_cols(df, ["notes", "comment"]) else "Notes"
+# Re-mapping with industrial-strength detection
+col_first = get_cols(df, ["first name", "executive 1 first", "nombre", "lead name", "contact name"])[0] if get_cols(df, ["first", "nombre", "lead"]) else None
+col_last = get_cols(df, ["last name", "executive 1 last", "apellido"])[0] if get_cols(df, ["last", "apellido"]) else None
+col_comp = get_cols(df, ["company name", "company", "account", "empresa", "organización", "firm"])[0] if get_cols(df, ["company", "account", "empresa"]) else None
+
+# Aggressive Phone Detection (Pulls all available numbers into the Dial list)
+phone_cols = get_cols(df, ["phone", "mobile", "tel", "celular", "direct phone", "work direct", "corporate phone", "toll free"])
+
+# LinkedIn & Links
+li_cols = get_cols(df, ["person linkedin url", "linkedin", "profile", "li-", "person url"])
+
+# Email
+col_email = get_cols(df, ["email", "executive 1 direct email", "correo", "mail", "@"])[0] if get_cols(df, ["email", "correo", "mail"]) else None
+
+# Notes & Descriptions
+col_notes = get_cols(df, ["business description", "notes", "comment", "history", "notas", "log"])[0] if get_cols(df, ["description", "notes", "notas"]) else "Notes"
+
+# Specific Intelligence Fields (For the right-hand column)
+col_revenue = get_cols(df, ["annual revenue", "annual sales", "total sales", "min sales"])[0] if get_cols(df, ["revenue", "sales"]) else None
+col_employees = get_cols(df, ["total employees", "# employees", "employees", "num employees"])[0] if get_cols(df, ["employee", "staff"]) else None
+col_role = get_cols(df, ["executive 1 title", "title", "role", "seniority", "position"])[0] if get_cols(df, ["title", "role"]) else None
 
 # --- SIDEBAR ---
 with st.sidebar:
@@ -249,16 +262,23 @@ if mode == "Dialer":
             if st.session_state.index > 0:
                 st.session_state.index -= 1
                 st.rerun()
-
+                
+    with c1: # Add this below the Existing Previous Button
+        if st.button("⏭️ SKIP", use_container_width=True):
+            move_val = 1 if dial_dir == "Top to Bottom" else -1
+            st.session_state.index += move_val
+            st.rerun()
+            
     with c2:
         if st.button("✅ LOG & NEXT", type="primary", use_container_width=True):
             move_val = 1 if dial_dir == "Top to Bottom" else -1
             log_action("Contact Made" if contact_made else "Outbound Call", step=move_val)
 
     with c3:
-        if st.button("🔗 ZCAL", key=f"zcal_{st.session_state.index}", use_container_width=True):
-            log_action("Zcal Link Sent", step=0)
-            st.components.v1.html(f"<script>window.open('https://zcal.co/masterofops/clarity', '_blank');</script>", height=0)
+        # Change to a direct link button for reliability
+        st.link_button("🔗 ZCAL", "https://zcal.co/masterofops/clarity", use_container_width=True)
+        # Note: Standard link buttons don't trigger log_action until clicked. 
+        # For OPS accuracy, keep your manual log.
 
     with c4:
         if st.button("💸 CLOSED", use_container_width=True):
@@ -268,15 +288,12 @@ if mode == "Dialer":
     with c5:
         email_val = lead.get(col_email, '')
         if pd.notna(email_val) and "@" in str(email_val):
-            if st.button("✉️ DESKTOP MAIL", key=f"desk_{st.session_state.index}", use_container_width=True):
-                # Using location.href for local mail clients to avoid popup blockers
-                st.components.v1.html(f"<script>window.location.href = 'mailto:{email_val}';</script>", height=0)
-                log_action("Email Sent (Local)", step=0)
-                
-            if st.button("🌐 GMAIL WEB", key=f"gmail_{st.session_state.index}", use_container_width=True):
-                gmail_url = f"https://mail.google.com/mail/?view=cm&fs=1&to={email_val}"
-                st.components.v1.html(f"<script>window.open('{gmail_url}', '_blank');</script>", height=0)
-                log_action("Email Sent (Gmail)", step=0)
+            # Desktop Mail
+            st.link_button("✉️ DESKTOP MAIL", f"mailto:{email_val}", use_container_width=True)
+            
+            # Gmail Web
+            gmail_url = f"https://mail.google.com/mail/?view=cm&fs=1&to={email_val}"
+            st.link_button("🌐 GMAIL WEB", gmail_url, use_container_width=True)
         else:
             st.error("No email found")
 
@@ -307,7 +324,8 @@ elif mode == "Dashboard":
         k4.metric("Closures", closed)
 
         st.divider()
-        activity_log['Timestamp'] = pd.to_datetime(activity_log['Timestamp'])
+       activity_log['Timestamp'] = pd.to_datetime(activity_log['Timestamp'], errors='coerce')
+activity_log = activity_log.dropna(subset=['Timestamp'])
         chart_data = activity_log.set_index('Timestamp').resample('D').count()['Lead Name']
         st.subheader("Daily Activity Volume")
         st.area_chart(chart_data)
