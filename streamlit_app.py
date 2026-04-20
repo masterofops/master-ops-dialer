@@ -6,8 +6,6 @@ from datetime import datetime, timedelta
 import urllib.parse
 import time
 
-import time
-
 # --- MASTER STRUCTURE DEFINITION ---
 MASTER_COLUMNS = [
     "First Name", "Last Name", "Corporate Phone", "Company Name", "Email", "Title", 
@@ -50,10 +48,6 @@ for i in range(1, 16):
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Master of Ops Dialer", layout="wide")
 
-
-# --- PAGE CONFIG ---
-st.set_page_config(page_title="Master of Ops Dialer", layout="wide")
-
 # --- 1. CONNECTION ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -62,14 +56,14 @@ if 'index' not in st.session_state:
 if 'start_time' not in st.session_state:
     st.session_state.start_time = time.time()
 
-# --- 2. SMART PARSER (Expanded for Corporate/Personal) ---
+# --- 2. SMART PARSER ---
 def get_cols(df, keywords):
     found = [col for col in df.columns if any(key.lower() in str(col).lower() for key in keywords)]
     return found if found else []
 
 # --- 3. DATA LOAD ---
 try:
-    df = conn.read(ttl=30).copy() # Lowered TTL for better responsiveness
+    df = conn.read(ttl=30).copy() 
     for c in df.columns: df[c] = df[c].astype(object)
     
     try:
@@ -80,24 +74,14 @@ except Exception as e:
     st.error(f"Sync Error: {e}")
     st.stop()
 
-# Re-mapping with industrial-strength detection
+# Re-mapping detection
 col_first = get_cols(df, ["first name", "executive 1 first", "nombre", "lead name", "contact name"])[0] if get_cols(df, ["first", "nombre", "lead"]) else None
 col_last = get_cols(df, ["last name", "executive 1 last", "apellido"])[0] if get_cols(df, ["last", "apellido"]) else None
 col_comp = get_cols(df, ["company name", "company", "account", "empresa", "organización", "firm"])[0] if get_cols(df, ["company", "account", "empresa"]) else None
-
-# Aggressive Phone Detection (Pulls all available numbers into the Dial list)
 phone_cols = get_cols(df, ["phone", "mobile", "tel", "celular", "direct phone", "work direct", "corporate phone", "toll free"])
-
-# LinkedIn & Links
 li_cols = get_cols(df, ["person linkedin url", "linkedin", "profile", "li-", "person url"])
-
-# Email
 col_email = get_cols(df, ["email", "executive 1 direct email", "correo", "mail", "@"])[0] if get_cols(df, ["email", "correo", "mail"]) else None
-
-# Notes & Descriptions
 col_notes = get_cols(df, ["business description", "notes", "comment", "history", "notas", "log"])[0] if get_cols(df, ["description", "notes", "notas"]) else "Notes"
-
-# Specific Intelligence Fields (For the right-hand column)
 col_revenue = get_cols(df, ["annual revenue", "annual sales", "total sales", "min sales"])[0] if get_cols(df, ["revenue", "sales"]) else None
 col_employees = get_cols(df, ["total employees", "# employees", "employees", "num employees"])[0] if get_cols(df, ["employee", "staff"]) else None
 col_role = get_cols(df, ["executive 1 title", "title", "role", "seniority", "position"])[0] if get_cols(df, ["title", "role"]) else None
@@ -107,7 +91,6 @@ with st.sidebar:
     st.title("MASTER OF OPS")
     mode = st.radio("Navigation", ["Dialer", "Dashboard", "Lead Manager"])
     
-    # Session Timer
     elapsed_seconds = time.time() - st.session_state.start_time
     hours, minutes = int(elapsed_seconds // 3600), int((elapsed_seconds % 3600) // 60)
     st.metric("Work Session Duration", f"{hours}h {minutes}m")
@@ -115,7 +98,6 @@ with st.sidebar:
     st.divider()
     dial_dir = st.radio("Dialing Direction", ["Top to Bottom", "Bottom to Top"])
 
-    # Jump & Navigation
     list_total = len(df) if len(df) > 0 else 1
     safe_index = max(0, min(st.session_state.index, list_total - 1))
     
@@ -135,10 +117,7 @@ with st.sidebar:
     st.divider()
     st.subheader("📤 Lead Enrichment")
     
-    # Option 1: File Upload
     uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
-    
-    # Option 2: Copy-Paste Contacts
     pasted_data = st.text_area("Or paste emails here (one per line):")
 
     if st.button("Add to Master List"):
@@ -156,18 +135,12 @@ with st.sidebar:
                     raw_data = raw_data[1:]
 
             if not raw_data.empty:
-                # 1. Create a container that matches your EXACT Master Sheet structure
                 new_batch = pd.DataFrame(columns=df.columns)
                 
-                # 2. Map Raw Data to Master Columns
-                # We look at every column in YOUR MASTER SHEET and try to find a match in the UPLOAD
                 for master_col in df.columns:
-                    # Look for the best match in the uploaded file
-                    # It checks for exact names, then partial keywords
                     match = next((c for c in raw_data.columns if str(c).lower() == str(master_col).lower()), None)
                     
                     if not match:
-                        # Fallback: Fuzzy search for common industrial/Apollo variations
                         keywords = []
                         if "Email" in master_col: keywords = ["email", "correo", "mail", "executive 1 direct email"]
                         elif "First Name" in master_col: keywords = ["first name", "nombre", "executive 1 first name"]
@@ -180,83 +153,39 @@ with st.sidebar:
                     if match:
                         new_batch[master_col] = raw_data[match]
 
-               # 3. Clean up the new batch (remove empty rows)
                 new_batch = new_batch.dropna(how='all')
 
-            if not new_batch.empty:
-                if col_email and col_email in df.columns:
-                    existing_emails = df[col_email].astype(str).str.lower().unique()
-                    new_leads = new_batch[~new_batch[col_email].astype(str).str.lower().isin(existing_emails)]
-                else:
-                    new_leads = new_batch
+                if not new_batch.empty:
+                    if col_email and col_email in df.columns:
+                        existing_emails = df[col_email].astype(str).str.lower().unique()
+                        new_leads = new_batch[~new_batch[col_email].astype(str).str.lower().isin(existing_emails)]
+                    else:
+                        new_leads = new_batch
 
-                if not new_leads.empty:
-                    # Direct append to your existing dataframe
-                    df = pd.concat([df, new_leads], ignore_index=True)
-                    
-                    # 5. Save and Reset
-                    df = df.reset_index(drop=True)
-                    conn.update(data=df)
-                    
-                    st.session_state.index = 0 
-                    st.success(f"Successfully injected {len(new_leads)} leads into your Master Structure.")
-                    st.cache_data.clear()
-                    time.sleep(1)
-                    st.rerun()
-                else:
-                    st.warning("No new leads to add (all were duplicates).")
-        except Exception as e:
-            st.error(f"Injection Error: {e}")
-            
-    # 3. Execution (Priority Mapping)
-    find_and_fill("First Name", ["executive 1 first name", "first name", "nombre"])
-    find_and_fill("Last Name", ["executive 1 last name", "last name", "apellido"])                    
-    find_and_fill("Email", ["executive 1 direct email", "primary email", "email", "@"])
-    find_and_fill("Title", ["executive 1 title", "title", "role"])
-    find_and_fill("Work Direct Phone", ["executive 1 direct phone", "work direct phone", "phone"])
-    find_and_fill("Company Name", ["company name", "company", "account"])
-    find_and_fill("Annual Revenue", ["annual sales", "annual revenue", "max sales"])
-    find_and_fill("# Employees", ["total employees", "employees", "# employees"])
-    
-    # 4. Auto-fill remaining columns that match exact names
-                for col in MASTER_COLUMNS:
-                    if col not in mapped_df.columns or mapped_df[col].isnull().all():
-                        find_and_fill(col, [col])
-
-                # 5. Merge with existing database (Anchor on Email)
-                m_email = "Email"
-                if m_email in df.columns:
-                    existing_emails = df[m_email].astype(str).str.lower().unique()
-                    new_leads = mapped_df[~mapped_df[m_email].astype(str).str.lower().isin(existing_emails)]
                     if not new_leads.empty:
                         df = pd.concat([df, new_leads], ignore_index=True)
-                else:
-                    df = mapped_df
-
-                # 6. Final Sync
-                df = df.reset_index(drop=True)
-                conn.update(data=df)
-                st.session_state.index = 0 
-                st.success(f"Mapped {len(mapped_df)} leads to Master Structure.")
-                st.cache_data.clear()
-                time.sleep(1)
-                st.rerun()
-
+                        df = df.reset_index(drop=True)
+                        conn.update(data=df)
+                        
+                        st.session_state.index = 0 
+                        st.success(f"Successfully injected {len(new_leads)} leads into your Master Structure.")
+                        st.cache_data.clear()
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.warning("No new leads to add (all were duplicates).")
         except Exception as e:
-            st.error(f"Mapping Error: {e}")
-            
+            st.error(f"Injection Error: {e}")
+
 # --- MODE: DIALER ---
 if mode == "Dialer":
-    # 1. Check if the list has data
     if df.empty:
         st.warning("Master list is empty. Please upload or paste leads in the sidebar.")
         st.stop()
         
-    # 2. Safety Check: Ensure the counter isn't pointing at a non-existent lead
     if st.session_state.index >= len(df) or st.session_state.index < 0:
         st.session_state.index = 0
 
-    # 3. Load lead data
     lead = df.iloc[st.session_state.index]
     orig_idx = lead.name
     full_name = f"{lead.get(col_first, '')} {lead.get(col_last, '')}"
@@ -264,7 +193,6 @@ if mode == "Dialer":
     st.title(f"📞 {full_name}")
     st.subheader(f"{lead.get(col_comp, 'N/A')}")
     
-    # RESTORED: Full Activity Log History for this specific lead
     past = activity_log[activity_log['Lead Name'] == full_name]
     if not past.empty:
         with st.expander("🕒 PREVIOUS INTERACTION HISTORY", expanded=True):
@@ -285,24 +213,21 @@ if mode == "Dialer":
 
     with col_r:
         st.markdown("### 🧠 Intelligence")
-        # --- A. MULTI-CONTACT RELATABILITY ---
         if col_comp and pd.notna(lead.get(col_comp)):
             company_name = lead.get(col_comp)
             others = df[df[col_comp] == company_name]
-            # Exclude the current lead from the "others" list
             others = others[others[col_email] != lead.get(col_email)]
             
             if not others.empty:
                 with st.expander(f"👥 OTHER CONTACTS AT {company_name}", expanded=False):
                     for _, o_lead in others.iterrows():
                         o_name = f"{o_lead.get(col_first, '')} {o_lead.get(col_last, '')}"
-                        o_role = next((o_lead.get(c) for c in df.columns if 'title' in c.lower() or 'role' in c.lower()), "N/A")
-                        st.write(f"**{o_name}** ({o_role})")
+                        o_title = next((o_lead.get(c) for c in df.columns if 'title' in c.lower() or 'role' in c.lower()), "N/A")
+                        st.write(f"**{o_name}** ({o_title})")
                         if col_email in o_lead: st.caption(f"📧 {o_lead[col_email]}")
         
         st.divider()
 
-        # --- B. SPECIFIC KEY INFO ---
         info_keys = ["title", "role", "location", "employee", "revenue", "keywords"]
         found_cols = []
         for col in df.columns:
@@ -312,8 +237,6 @@ if mode == "Dialer":
                     st.write(f"🔹 **{col}:** {val}")
                     found_cols.append(col)
 
-        # --- C. CATCH-ALL (HIDDEN DATA BOX) ---
-        # This shows everything else that isn't already displayed
         already_shown = [col_first, col_last, col_comp, col_email, col_notes, "Rating", "Last Touch"] + phone_cols + found_cols
         other_data = ""
         for col in df.columns:
@@ -327,7 +250,6 @@ if mode == "Dialer":
 
         st.divider()
         
-        # LinkedIn Profiles
         for col in df.columns:
             if "linkedin" in col.lower() or "profile" in col.lower():
                 url = lead.get(col, '')
@@ -335,10 +257,8 @@ if mode == "Dialer":
                     st.write(f"👤 **{col}:** [View Profile]({url})")
         
         st.info(f"📋 **Static Sheet Notes:**\n\n {lead.get(col_notes, 'None')}")
-        
-        st.info(f"📋 **Static Sheet Notes:**\n\n {lead.get(col_notes, 'None')}")
 
-    def log_action(outcome, step=0): # Default step to 0 so it doesn't move unless told
+    def log_action(outcome, step=0): 
         ts = datetime.now().strftime("%m/%d %H:%M")
         old = str(lead.get(col_notes, "")) if not pd.isna(lead.get(col_notes)) else ""
         
@@ -359,7 +279,6 @@ if mode == "Dialer":
             st.session_state.index += step
             st.rerun()
 
-   # --- ACTION BUTTONS ---
     st.write("---")
     c1, c2, c3, c4, c5 = st.columns(5)
     
@@ -368,8 +287,6 @@ if mode == "Dialer":
             if st.session_state.index > 0:
                 st.session_state.index -= 1
                 st.rerun()
-                
-    with c1: # Add this below the Existing Previous Button
         if st.button("⏭️ SKIP", use_container_width=True):
             move_val = 1 if dial_dir == "Top to Bottom" else -1
             st.session_state.index += move_val
@@ -381,10 +298,7 @@ if mode == "Dialer":
             log_action("Contact Made" if contact_made else "Outbound Call", step=move_val)
 
     with c3:
-        # Change to a direct link button for reliability
         st.link_button("🔗 ZCAL", "https://zcal.co/masterofops/clarity", use_container_width=True)
-        # Note: Standard link buttons don't trigger log_action until clicked. 
-        # For OPS accuracy, keep your manual log.
 
     with c4:
         if st.button("💸 CLOSED", use_container_width=True):
@@ -394,22 +308,16 @@ if mode == "Dialer":
     with c5:
         email_val = lead.get(col_email, '')
         if pd.notna(email_val) and "@" in str(email_val):
-            # Desktop Mail
             st.link_button("✉️ DESKTOP MAIL", f"mailto:{email_val}", use_container_width=True)
             
-            # --- GOOGLE CALENDAR APPOINTMENT ---
-        if st.button("📅 SCHEDULE G-CAL", use_container_width=True):
-            # Encode lead info for the URL
-            subject = urllib.parse.quote(f"Clarity Call: Master of Ops x {lead.get(col_comp, 'Lead')}")
-            details = urllib.parse.quote(f"Meeting with {full_name}\nEmail: {email_val}\nNotes: {lead.get(col_notes, '')}")
-            
-            # Create Google Calendar Link (30 min default)
-            gcal_link = f"https://www.google.com/calendar/render?action=TEMPLATE&text={subject}&details={details}"
-            if pd.notna(email_val):
-                gcal_link += f"&add={email_val}"
-            
-            st.components.v1.html(f"<script>window.open('{gcal_link}', '_blank');</script>", height=0)
-            log_action("G-Cal Invite Prepared", step=0)
+            if st.button("📅 SCHEDULE G-CAL", use_container_width=True):
+                subject = urllib.parse.quote(f"Clarity Call: Master of Ops x {lead.get(col_comp, 'Lead')}")
+                details = urllib.parse.quote(f"Meeting with {full_name}\nEmail: {email_val}\nNotes: {lead.get(col_notes, '')}")
+                gcal_link = f"https://www.google.com/calendar/render?action=TEMPLATE&text={subject}&details={details}"
+                if pd.notna(email_val):
+                    gcal_link += f"&add={email_val}"
+                st.components.v1.html(f"<script>window.open('{gcal_link}', '_blank');</script>", height=0)
+                log_action("G-Cal Invite Prepared", step=0)
         else:
             st.error("No email found")
 
