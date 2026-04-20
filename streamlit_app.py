@@ -164,14 +164,59 @@ if mode == "Dialer":
         rating = st.selectbox("Rating", ["Cold", "Warm", "Hot"], index=1)
         new_note = st.text_area("Live Call Notes", key=f"note_{st.session_state.index}")
 
-    with col_r:
+   with col_r:
         st.markdown("### 🧠 Intelligence")
-        # PASTE THIS HERE:
+        
+        # --- A. MULTI-CONTACT RELATABILITY ---
+        if col_comp and pd.notna(lead.get(col_comp)):
+            company_name = lead.get(col_comp)
+            others = df[df[col_comp] == company_name]
+            # Exclude the current lead from the "others" list
+            others = others[others[col_email] != lead.get(col_email)]
+            
+            if not others.empty:
+                with st.expander(f"👥 OTHER CONTACTS AT {company_name}", expanded=False):
+                    for _, o_lead in others.iterrows():
+                        o_name = f"{o_lead.get(col_first, '')} {o_lead.get(col_last, '')}"
+                        o_role = next((o_lead.get(c) for c in df.columns if 'title' in c.lower() or 'role' in c.lower()), "N/A")
+                        st.write(f"**{o_name}** ({o_role})")
+                        if col_email in o_lead: st.caption(f"📧 {o_lead[col_email]}")
+        
+        st.divider()
+
+        # --- B. SPECIFIC KEY INFO ---
+        info_keys = ["title", "role", "location", "employee", "revenue", "keywords"]
+        found_cols = []
+        for col in df.columns:
+            if any(key in col.lower() for key in info_keys):
+                val = lead.get(col, 'N/A')
+                if pd.notna(val) and str(val).strip() != '':
+                    st.write(f"🔹 **{col}:** {val}")
+                    found_cols.append(col)
+
+        # --- C. CATCH-ALL (HIDDEN DATA BOX) ---
+        # This shows everything else that isn't already displayed
+        already_shown = [col_first, col_last, col_comp, col_email, col_notes, "Rating", "Last Touch"] + phone_cols + found_cols
+        other_data = ""
+        for col in df.columns:
+            if col not in already_shown:
+                val = lead.get(col, '')
+                if pd.notna(val) and str(val).strip() != '':
+                    other_data += f"{col}: {val}\n"
+        
+        if other_data:
+            st.text_area("📋 Raw Lead Data (Uncategorized)", value=other_data, height=150)
+
+        st.divider()
+        
+        # LinkedIn Profiles
         for col in df.columns:
             if "linkedin" in col.lower() or "profile" in col.lower():
                 url = lead.get(col, '')
                 if pd.notna(url) and str(url).startswith('http'):
                     st.write(f"👤 **{col}:** [View Profile]({url})")
+        
+        st.info(f"📋 **Static Sheet Notes:**\n\n {lead.get(col_notes, 'None')}")
         
         st.info(f"📋 **Static Sheet Notes:**\n\n {lead.get(col_notes, 'None')}")
 
@@ -244,13 +289,21 @@ if mode == "Dialer":
             # DESKTOP MAIL FIX
             if st.button("✉️ DESKTOP MAIL", key=f"desk_{st.session_state.index}", use_container_width=True):
                 log_action("Email Sent (Local)", step=0)
+                
+                if st.button("🌐 GMAIL WEB", key=f"gmail_{st.session_state.index}", use_container_width=True):
+                gmail_url = f"https://mail.google.com/mail/?view=cm&fs=1&to={email_val}"
+                # Trigger window open BEFORE the slow Sheets update
+                st.components.v1.html(f"<script>window.open('{gmail_url}', '_blank');</script>", height=0)
+                log_action("Email Sent (Gmail)", step=0)
+
+                
                 # We use a hidden anchor click for local mail clients
                 st.components.v1.html(f"""
                     <script>
                         var a = document.createElement('a');
                         a.href = 'mailto:{email_val}';
                         a.click();
-                    </script>
+                    </script>                  
                 """, height=0)
 
             # GMAIL WEB FIX
