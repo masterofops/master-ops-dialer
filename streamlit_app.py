@@ -138,8 +138,13 @@ with st.sidebar:
                     if not additions.empty:
                         df = pd.concat([df, additions], ignore_index=True)
                 
+                # After merging/adding data, clean the Master Sheet
+                df = df.reset_index(drop=True)
                 conn.update(data=df)
-                st.success(f"Processed {len(new_entries)} leads. Duplicates enriched, new leads added.")
+                
+                # RESET SESSION to avoid IndexError
+                st.session_state.index = 0 
+                st.success(f"Processed {len(new_entries)} leads. Dialer reset to start.")
                 st.cache_data.clear()
                 time.sleep(1)
                 st.rerun()
@@ -148,16 +153,23 @@ with st.sidebar:
             
 # --- MODE: DIALER ---
 if mode == "Dialer":
+    # 1. Check if the list has data
+    if df.empty:
+        st.warning("Master list is empty. Please upload or paste leads in the sidebar.")
+        st.stop()
+        
+    # 2. Safety Check: Ensure the counter isn't pointing at a non-existent lead
     if st.session_state.index >= len(df) or st.session_state.index < 0:
         st.session_state.index = 0
 
+    # 3. Load lead data
     lead = df.iloc[st.session_state.index]
     orig_idx = lead.name
     full_name = f"{lead.get(col_first, '')} {lead.get(col_last, '')}"
     
     st.title(f"📞 {full_name}")
     st.subheader(f"{lead.get(col_comp, 'N/A')}")
-
+    
     # RESTORED: Full Activity Log History for this specific lead
     past = activity_log[activity_log['Lead Name'] == full_name]
     if not past.empty:
@@ -291,9 +303,19 @@ if mode == "Dialer":
             # Desktop Mail
             st.link_button("✉️ DESKTOP MAIL", f"mailto:{email_val}", use_container_width=True)
             
-            # Gmail Web
-            gmail_url = f"https://mail.google.com/mail/?view=cm&fs=1&to={email_val}"
-            st.link_button("🌐 GMAIL WEB", gmail_url, use_container_width=True)
+            # --- GOOGLE CALENDAR APPOINTMENT ---
+        if st.button("📅 SCHEDULE G-CAL", use_container_width=True):
+            # Encode lead info for the URL
+            subject = urllib.parse.quote(f"Clarity Call: Master of Ops x {lead.get(col_comp, 'Lead')}")
+            details = urllib.parse.quote(f"Meeting with {full_name}\nEmail: {email_val}\nNotes: {lead.get(col_notes, '')}")
+            
+            # Create Google Calendar Link (30 min default)
+            gcal_link = f"https://www.google.com/calendar/render?action=TEMPLATE&text={subject}&details={details}"
+            if pd.notna(email_val):
+                gcal_link += f"&add={email_val}"
+            
+            st.components.v1.html(f"<script>window.open('{gcal_link}', '_blank');</script>", height=0)
+            log_action("G-Cal Invite Prepared", step=0)
         else:
             st.error("No email found")
 
