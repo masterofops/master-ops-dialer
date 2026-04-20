@@ -6,6 +6,51 @@ from datetime import datetime, timedelta
 import urllib.parse
 import time
 
+import time
+
+# --- MASTER STRUCTURE DEFINITION ---
+MASTER_COLUMNS = [
+    "First Name", "Last Name", "Corporate Phone", "Company Name", "Email", "Title", 
+    "Primary Email", "Catch-all Status", "Seniority", "Stage", "Person Linkedin", 
+    "City", "State", "Country", "# Employees", "Status", "Rating", "Last Touch", 
+    "Next Follow up", "Company Linkedin", "Industry", "Website", "Lists", "Keywords", 
+    "Secondary Email", "Annual Revenue", "Notes", "Company Name for Emails", 
+    "Email Status", "Primary Email Source", "Primary Email Verification Source", 
+    "Email Confidence", "Primary Email Catch-all Status", "Primary Email Last Verified At", 
+    "Departments", "Sub Departments", "Contact Owner", "Work Direct Phone", "Home Phone", 
+    "Mobile Phone", "Other Phone", "Do Not Call", "Last Contacted", "Account Owner", 
+    "Person Linkedin Url", "Company Linkedin Url", "Facebook Url", "Twitter Url", 
+    "Company Address", "Company City", "Company State", "Company Country", "Company Phone", 
+    "Technologies", "Total Funding", "Latest Funding", "Latest Funding Amount", "Last Raised At", 
+    "Subsidiary of", "Subsidiary of (Organization ID)", "Email Sent", "Email Open", 
+    "Email Bounced", "Replied", "Demoed", "Number of Retail Locations", "Apollo Contact Id", 
+    "Apollo Account Id", "Secondary Email Source", "Secondary Email Status", 
+    "Secondary Email Verification Source", "Tertiary Email", "Tertiary Email Source", 
+    "Tertiary Email Status", "Tertiary Email Verification Source", "Primary Intent Topic", 
+    "Primary Intent Score", "Secondary Intent Topic", "Secondary Intent Score", 
+    "Qualify Contact", "Company ID", "Company", "Physical Address", "Physical City", 
+    "Physical Zip", "Physical County", "Mailing Address", "Mailing City", "Mailing State", 
+    "Mailing Zip", "Phone", "Alternate Phone", "Toll Free", "Company Email", "Employees", 
+    "Total Employees", "Min Sales", "Max Sales", "Annual Sales", "Square Footage", 
+    "Year Established", "Distribution Area", "Ownership", "Imports", "Woman Owned", 
+    "Minority Owned", "Veteran Owned", "ISO Certifications", "Business Description", 
+    "Brand Names", "Primary SIC Code", "Primary SIC Code Description", "SIC Code 2", 
+    "SIC Code 2 Description", "SIC Code 3", "SIC Code 3 Description", "SIC Code 4", 
+    "SIC Code 4 Description", "NAICS Code", "NAICS Code Description"
+]
+for i in range(1, 16):
+    prefix = f"Executive {i}"
+    MASTER_COLUMNS.extend([
+        f"{prefix} Contact ID", f"{prefix} Salutation", f"{prefix} First Name", 
+        f"{prefix} Middle Name", f"{prefix} Last Name", f"{prefix} Suffix", 
+        f"{prefix} Title", f"{prefix} Abbreviated Title", f"{prefix} Direct Email", 
+        f"{prefix} Direct Phone"
+    ])
+
+# --- PAGE CONFIG ---
+st.set_page_config(page_title="Master of Ops Dialer", layout="wide")
+
+
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Master of Ops Dialer", layout="wide")
 
@@ -98,58 +143,62 @@ with st.sidebar:
 
     if st.button("Add to Master List"):
         try:
-            new_entries = pd.DataFrame()
+            raw_data = pd.DataFrame()
             if uploaded_file:
-                new_entries = pd.read_csv(uploaded_file, encoding='latin1', on_bad_lines='skip')
+                raw_data = pd.read_csv(uploaded_file, encoding='latin1', on_bad_lines='skip')
             elif pasted_data:
-                # Detect if pasted data is a table (Excel/LinkedIn) or just list
                 rows = [line.split('\t') for line in pasted_data.strip().split('\n')]
-                if len(rows[0]) > 1:
-                    temp_df = pd.DataFrame(rows)
-                    # Try to find headers in first row, else use Master Sheet columns
-                    if any('@' in str(x) for x in rows[0]): # No header row
-                        temp_df.columns = df.columns[:len(temp_df.columns)]
-                    else:
-                        temp_df.columns = rows[0]
-                        temp_df = temp_df[1:] # Drop header row
-                    new_entries = temp_df
-                else:
-                    new_entries = pd.DataFrame({col_email: [r[0].strip() for r in rows if '@' in r[0]]})
+                raw_data = pd.DataFrame(rows)
+                if not any('@' in str(x) for x in rows[0]):
+                    raw_data.columns = rows[0]
+                    raw_data = raw_data[1:]
 
-            if not new_entries.empty:
-                # Standardize columns to match Master
-                new_entries.columns = [c.strip() for c in new_entries.columns]
+            if not raw_data.empty:
+                # 1. Create empty template with the Master Structure
+                mapped_df = pd.DataFrame(columns=MASTER_COLUMNS)
                 
-                # Merge logic: Email is the Anchor
-                if col_email in new_entries.columns and col_email in df.columns:
-                    # Identify existing vs new
-                    existing_emails = df[col_email].unique()
-                    updates = new_entries[new_entries[col_email].isin(existing_emails)]
-                    additions = new_entries[~new_entries[col_email].isin(existing_emails)]
-                    
-                    # Update existing leads (Enrichment)
-                    for _, row in updates.iterrows():
-                        idx = df[df[col_email] == row[col_email]].index[0]
-                        for col in row.index:
-                            if col in df.columns and pd.notna(row[col]):
-                                df.at[idx, col] = row[col]
-                    
-                    # Add brand new leads
-                    if not additions.empty:
-                        df = pd.concat([df, additions], ignore_index=True)
+                # 2. Define internal helper for fuzzy matching
+                def find_and_fill(target_col, keywords):
+                    source_col = next((c for c in raw_data.columns if any(k.lower() in str(c).lower() for k in keywords)), None)
+                    if source_col:
+                        mapped_df[target_col] = raw_data[source_col]
+
+                # 3. Execution (Priority Mapping)
+                find_and_fill("First Name", ["executive 1 first name", "first name", "nombre"])
+                find_and_fill("Last Name", ["executive 1 last name", "last name", "apellido"])
+                find_and_fill("Email", ["executive 1 direct email", "primary email", "email", "@"])
+                find_and_fill("Title", ["executive 1 title", "title", "role"])
+                find_and_fill("Work Direct Phone", ["executive 1 direct phone", "work direct phone", "phone"])
+                find_and_fill("Company Name", ["company name", "company", "account"])
+                find_and_fill("Annual Revenue", ["annual sales", "annual revenue", "max sales"])
+                find_and_fill("# Employees", ["total employees", "employees", "# employees"])
                 
-                # After merging/adding data, clean the Master Sheet
+                # 4. Auto-fill remaining columns that match exact names
+                for col in MASTER_COLUMNS:
+                    if col not in mapped_df.columns or mapped_df[col].isnull().all():
+                        find_and_fill(col, [col])
+
+                # 5. Merge with existing database (Anchor on Email)
+                m_email = "Email"
+                if m_email in df.columns:
+                    existing_emails = df[m_email].astype(str).str.lower().unique()
+                    new_leads = mapped_df[~mapped_df[m_email].astype(str).str.lower().isin(existing_emails)]
+                    if not new_leads.empty:
+                        df = pd.concat([df, new_leads], ignore_index=True)
+                else:
+                    df = mapped_df
+
+                # 6. Final Sync
                 df = df.reset_index(drop=True)
                 conn.update(data=df)
-                
-                # RESET SESSION to avoid IndexError
                 st.session_state.index = 0 
-                st.success(f"Processed {len(new_entries)} leads. Dialer reset to start.")
+                st.success(f"Mapped {len(mapped_df)} leads to Master Structure.")
                 st.cache_data.clear()
                 time.sleep(1)
                 st.rerun()
+
         except Exception as e:
-            st.error(f"Logic Error: {e}")
+            st.error(f"Mapping Error: {e}")
             
 # --- MODE: DIALER ---
 if mode == "Dialer":
