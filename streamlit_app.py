@@ -240,18 +240,8 @@ if mode == "Dialer":
             st.session_state.index += step
             st.rerun()
 
-    # --- ACTION BUTTONS ---
+   # --- ACTION BUTTONS ---
     st.write("---")
-    cx, cy = st.columns(2)
-    
-    # Improved Link Triggers
-    if cx.button("🔵 Log LinkedIn Message", use_container_width=True):
-        log_action("LinkedIn Sent", step=0)
-    
-    if cy.button("📧 Log Manual Email", use_container_width=True):
-        log_action("Email Sent", step=0)
-    
-    st.divider()
     c1, c2, c3, c4, c5 = st.columns(5)
     
     with c1:
@@ -266,17 +256,10 @@ if mode == "Dialer":
             log_action("Contact Made" if contact_made else "Outbound Call", step=move_val)
 
     with c3:
-        zcal_url = "https://zcal.co/masterofops/clarity"
-        # We use a unique key for every lead to prevent button state conflicts
         if st.button("🔗 ZCAL", key=f"zcal_{st.session_state.index}", use_container_width=True):
             log_action("Zcal Link Sent", step=0)
-            st.components.v1.html(f"<script>window.open('{zcal_url}', '_blank');</script>", height=0)
-        
-        cal_link = f"https://www.google.com/calendar/render?action=TEMPLATE&text={urllib.parse.quote('Appt: ' + full_name)}"
-        if st.button("📅 G-CAL", key=f"gcal_{st.session_state.index}", use_container_width=True):
-            log_action("G-Cal Scheduled", step=0)
-            st.components.v1.html(f"<script>window.open('{cal_link}', '_blank');</script>", height=0)
-            
+            st.components.v1.html(f"<script>window.open('https://zcal.co/masterofops/clarity', '_blank');</script>", height=0)
+
     with c4:
         if st.button("💸 CLOSED", use_container_width=True):
             st.balloons()
@@ -285,52 +268,17 @@ if mode == "Dialer":
     with c5:
         email_val = lead.get(col_email, '')
         if pd.notna(email_val) and "@" in str(email_val):
-            # DESKTOP MAIL FIX
             if st.button("✉️ DESKTOP MAIL", key=f"desk_{st.session_state.index}", use_container_width=True):
+                # Using location.href for local mail clients to avoid popup blockers
+                st.components.v1.html(f"<script>window.location.href = 'mailto:{email_val}';</script>", height=0)
                 log_action("Email Sent (Local)", step=0)
                 
             if st.button("🌐 GMAIL WEB", key=f"gmail_{st.session_state.index}", use_container_width=True):
                 gmail_url = f"https://mail.google.com/mail/?view=cm&fs=1&to={email_val}"
-                # Trigger window open BEFORE the slow Sheets update
-                st.components.v1.html(f"<script>window.open('{gmail_url}', '_blank');</script>", height=0)
-                log_action("Email Sent (Gmail)", step=0)
-
-                
-                # We use a hidden anchor click for local mail clients
-                st.components.v1.html(f"""
-                    <script>
-                        var a = document.createElement('a');
-                        a.href = 'mailto:{email_val}';
-                        a.click();
-                    </script>                  
-                """, height=0)
-
-            # GMAIL WEB FIX
-            with c5:
-        email_val = lead.get(col_email, '')
-        if pd.notna(email_val) and "@" in str(email_val):
-            
-            # 1. DESKTOP MAIL
-            if st.button("✉️ DESKTOP MAIL", key=f"desk_{st.session_state.index}", use_container_width=True):
-                # Trigger window open first
-                st.components.v1.html(f"""
-                    <script>
-                        var a = document.createElement('a');
-                        a.href = 'mailto:{email_val}';
-                        a.click();
-                    </script>
-                """, height=0)
-                # Then log the action
-                log_action("Email Sent (Local)", step=0)
-
-            # 2. GMAIL WEB
-            if st.button("🌐 GMAIL WEB", key=f"gmail_{st.session_state.index}", use_container_width=True):
-                gmail_url = f"https://mail.google.com/mail/?view=cm&fs=1&to={email_val}"
-                # Trigger window open BEFORE the slow Sheets update
                 st.components.v1.html(f"<script>window.open('{gmail_url}', '_blank');</script>", height=0)
                 log_action("Email Sent (Gmail)", step=0)
         else:
-            st.error("No valid email found.")
+            st.error("No email found")
         
         # Ratios
         con_to_appt = (appts / contacts * 100) if contacts > 0 else 0
