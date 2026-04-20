@@ -279,34 +279,10 @@ if mode == "Dialer":
                 log_action("Email Sent (Gmail)", step=0)
         else:
             st.error("No email found")
-        
-        elif mode == "Dashboard":
-    st.title("📊 Performance Dashboard")
-    
-    if not activity_log.empty:
-        # Define the variables that were missing
-        dials = len(activity_log)
-        contacts = len(activity_log[activity_log['Outcome'].str.contains("Contact Made", na=False)])
-        appts = len(activity_log[activity_log['Outcome'].str.contains("Scheduled|Zcal|G-Cal", na=False)])
-        closed = len(activity_log[activity_log['Outcome'] == "Closed Deal"])
-
-        # KPI Tiles
-        k1, k2, k3, k4 = st.columns(4)
-        k1.metric("Total Dials", dials)
-        k2.metric("Contacts", contacts)
-        k3.metric("Appointments", appts)
-        k4.metric("Closures", closed)
 
         st.divider()
-        st.subheader("Daily Activity")
-        # Fix for the chart
-        activity_log['Timestamp'] = pd.to_datetime(activity_log['Timestamp'])
-        chart_data = activity_log.set_index('Timestamp').resample('D').count()['Lead Name']
-        st.area_chart(chart_data)
-    else:
-        st.info("No activity logged yet. Start dialing to see stats!")
-
-        # Graph Fix
+        
+            # Graph Fix
         st.subheader("Daily Activity Volume")
         chart_data = f_log.set_index('Timestamp').resample('D').count()['Lead Name']
         st.area_chart(chart_data)
@@ -322,3 +298,25 @@ elif mode == "Lead Manager":
         
     st.write(f"Showing {len(filtered_df)} leads")
     st.dataframe(filtered_df, use_container_width=True)
+
+    elif mode == "Dashboard":
+    st.title("📊 Performance Dashboard")
+    if not activity_log.empty:
+        dials = len(activity_log)
+        contacts = len(activity_log[activity_log['Outcome'].str.contains("Contact Made", na=False)])
+        appts = len(activity_log[activity_log['Outcome'].str.contains("Scheduled|Zcal|G-Cal", na=False)])
+        closed = len(activity_log[activity_log['Outcome'] == "Closed Deal"])
+
+        k1, k2, k3, k4 = st.columns(4)
+        k1.metric("Total Dials", dials)
+        k2.metric("Contacts", contacts)
+        k3.metric("Appointments", appts)
+        k4.metric("Closures", closed)
+
+        st.divider()
+        activity_log['Timestamp'] = pd.to_datetime(activity_log['Timestamp'])
+        chart_data = activity_log.set_index('Timestamp').resample('D').count()['Lead Name']
+        st.subheader("Daily Activity Volume")
+        st.area_chart(chart_data)
+    else:
+        st.info("No activity logged yet.")
