@@ -83,32 +83,47 @@ with st.sidebar:
     # Option 2: Copy-Paste Contacts
     pasted_data = st.text_area("Or paste emails here (one per line):")
 
-    if st.button("Add to Master List"):
-        # We wrap the logic in a TRY block to catch errors
+   if st.button("Add to Master List"):
         try:
             new_entries = pd.DataFrame()
             
             if uploaded_file:
                 new_entries = pd.read_csv(uploaded_file, encoding='latin1', on_bad_lines='skip')
             elif pasted_data:
-                emails = [e.strip() for e in pasted_data.split('\n') if '@' in e]
-                new_entries = pd.DataFrame({col_email: emails})
+                # Logic: Check if it's a table (tabs) or just a list (newlines)
+                rows = [line.split('\t') for line in pasted_data.strip().split('\n')]
+                if len(rows[0]) > 1:
+                    # If it's a table, create a temp DF and let the smart mapper find columns
+                    temp_df = pd.DataFrame(rows)
+                    # We look for email to identify which column is which
+                    for i in range(len(temp_df.columns)):
+                        if temp_df[i].str.contains('@').any():
+                            temp_df = temp_df.rename(columns={i: col_email})
+                    new_entries = temp_df
+                else:
+                    # Just a single list of emails
+                    emails = [e.strip() for e in pasted_data.split('\n') if '@' in e]
+                    new_entries = pd.DataFrame({col_email: emails})
 
             if not new_entries.empty:
-                # CLEANING: Only keep columns that exist in Master Sheet
-                new_entries = new_entries[new_entries.columns.intersection(df.columns)]
+                # SMART MAP: Rename columns in pasted data to match Master Sheet if they look similar
+                for new_col in new_entries.columns:
+                    for master_col in df.columns:
+                        if str(new_col).lower() == str(master_col).lower():
+                            new_entries = new_entries.rename(columns={new_col: master_col})
+
+                # Keep only relevant columns and merge
+                valid_cols = new_entries.columns.intersection(df.columns)
+                new_entries = new_entries[valid_cols]
                 
-                # COMBINE: Append and drop duplicates
                 updated_df = pd.concat([df, new_entries], ignore_index=True)
                 if col_email in updated_df.columns:
                     updated_df = updated_df.drop_duplicates(subset=[col_email], keep='first')
                 
-                # SAVE
                 conn.update(data=updated_df)
-                st.success("List Updated & Synced!")
+                st.success("List Synced & Parsed!")
                 st.cache_data.clear()
                 st.rerun()
-        # This EXCEPT now correctly matches the TRY above
         except Exception as e:
             st.error(f"Upload Error: {e}")
             
@@ -200,25 +215,44 @@ if mode == "Dialer":
             log_action("Contact Made" if contact_made else "Outbound Call")
 
     with c3:
-        if st.button("📅 APPOINTMENT", use_container_width=True):
-            log_action("Appointment Scheduled", step=0)
-            cal_link = f"https://www.google.com/calendar/render?action=TEMPLATE&text={urllib.parse.quote('Appt: ' + full_name)}"
-            # NEW TRIGGER: Uses JS to ensure the browser actually opens the tab
+        # Zcal Option
+        zcal_url = "https://zcal.co/masterofops/clarity"
+        if st.button("🔗 ZCAL", use_container_width=True):
+            log_action("Zcal Link Sent", step=0)
+            st.components.v1.html(f"<script>window.open('{zcal_url}', '_blank');</script>", height=0)
+        
+        # Google Calendar Option
+        cal_link = f"https://www.google.com/calendar/render?action=TEMPLATE&text={urllib.parse.quote('Appt: ' + full_name)}"
+        if st.button("📅 G-CAL", use_container_width=True):
+            log_action("G-Cal Scheduled", step=0)
             st.components.v1.html(f"<script>window.open('{cal_link}', '_blank');</script>", height=0)
-
     with c4:
         if st.button("💸 CLOSED", use_container_width=True):
             st.balloons()
             log_action("Closed Deal")
 
     with c5:
-        if st.button("✉️ EMAIL", use_container_width=True):
-            log_action("Email Sent", step=0)
-            email_val = lead.get(col_email, '')
-            if pd.notna(email_val):
+        email_val = lead.get(col_email, '')
+        if pd.notna(email_val) and "@" in str(email_val):
+            # Option 1: Local Email Client (Desktop App)
+            if st.button("✉️ DESKTOP MAIL", use_container_width=True):
+                log_action("Email Sent (Local)", step=0)
                 mailto_link = f"mailto:{email_val}"
-                # NEW TRIGGER: JS trigger for mailto
-                st.components.v1.html(f"<script>window.location.href = '{mailto_link}';</script>", height=0)
+                st.components.v1.html(f"""
+                    <script>
+                        var link = document.createElement('a');
+                        link.href = '{mailto_link}';
+                        link.click();
+                    </script>
+                """, height=0)
+
+            # Option 2: Gmail Web Redirect
+            if st.button("🌐 GMAIL WEB", use_container_width=True):
+                log_action("Email Sent (Gmail)", step=0)
+                gmail_url = f"https://mail.google.com/mail/?view=cm&fs=1&to={email_val}"
+                st.components.v1.html(f"<script>window.open('{gmail_url}', '_blank');</script>", height=0)
+        else:
+            st.error("No valid email found.")
 
 # --- MODE: DASHBOARD ---
 elif mode == "Dashboard":
