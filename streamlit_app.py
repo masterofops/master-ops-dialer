@@ -15,10 +15,10 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 if 'index' not in st.session_state:
     st.session_state.index = 0
 
-# --- 2. SMART PARSER (Detects columns by content, not just names) ---
-def get_col(df, keywords, default_val="N/A"):
+# --- 2. SMART PARSER (Detects columns by content) ---
+def get_col(df, keywords):
     for col in df.columns:
-        if any(key.lower() in col.lower() for key in keywords):
+        if any(key.lower() in str(col).lower() for key in keywords):
             return col
     return None
 
@@ -27,11 +27,18 @@ def clean_phone(val):
     if pd.isna(val) or val == "": return ""
     return re.sub(r'\D', '', str(val))
 
-def safe_append_activity(log_df, new_entry):
-    """Appends to the Activity_Log without trying to recreate the sheet."""
-    updated_log = pd.concat([log_df, new_entry], ignore_index=True)
-    conn.update(worksheet="Activity_Log", data=updated_log)
-    st.toast("✅ Activity Tracked")
+def safe_append_activity(new_entry):
+    """Safely appends to the Activity_Log worksheet."""
+    try:
+        # Read the current log
+        current_log = conn.read(worksheet="Activity_Log", ttl=0).copy()
+        updated_log = pd.concat([current_log, new_entry], ignore_index=True)
+        conn.update(worksheet="Activity_Log", data=updated_log)
+        st.toast("✅ Activity Tracked")
+    except Exception as e:
+        # If sheet doesn't exist, create it with the first entry
+        conn.create(worksheet="Activity_Log", data=new_entry)
+        st.toast("✅ New Log Created")
 
 # --- 4. DATA LOAD ---
 try:
@@ -43,7 +50,6 @@ try:
     try:
         activity_log = conn.read(worksheet="Activity_Log", ttl=0).copy()
     except:
-        # Create empty log if it doesn't exist (only happens once)
         activity_log = pd.DataFrame(columns=["Timestamp", "Lead Name", "Outcome", "Rating", "Note", "User"])
 except Exception as e:
     st.error(f"Sync Error: {e}")
@@ -68,6 +74,14 @@ with st.sidebar:
 
 # --- MODE: DIALER ---
 if mode == "Dialer":
+    # SAFETY GATE: Check if index is within the current dataframe size
+    if st.session_state.index >= len(df):
+        st.success("🏁 All leads processed or index out of bounds.")
+        if st.button("Back to Lead 1"):
+            st.session_state.index = 0
+            st.rerun()
+        st.stop()
+
     lead = df.iloc[st.session_state.index]
     orig_idx = lead.name
     full_name = f"{lead.get(col_first, '')} {lead.get(col_last, '')}"
@@ -75,10 +89,10 @@ if mode == "Dialer":
     st.title(f"📞 {full_name}")
     st.subheader(f"{lead.get(col_comp, 'N/A')}")
 
-    # Historical Intel Section
+    # History Expander
     past_interactions = activity_log[activity_log['Lead Name'] == full_name]
     if not past_interactions.empty:
-        with st.expander("🕒 PREVIOUS CONTACT HISTORY", expanded=False):
+        with st.expander("🕒 PREVIOUS CONTACT HISTORY", expanded=True):
             st.table(past_interactions[['Timestamp', 'Outcome', 'Note']].tail(5))
 
     col_l, col_r = st.columns([1, 1])
@@ -91,13 +105,14 @@ if mode == "Dialer":
         
         contact_made = st.checkbox("👤 CONTACT MADE")
         rating = st.selectbox("Lead Rating", ["Cold", "Warm", "Hot"], index=1)
-        new_note = st.text_area("New Call Note", placeholder="Add to history...")
+        new_note = st.text_area("New Call Note", placeholder="Append new info here...")
 
     with col_r:
         st.markdown("### 🧠 Lead Intel")
         st.write(f"🌐 **Email:** {lead.get(col_email, 'N/A')}")
         st.write(f"👤 **LinkedIn:** [Profile]({lead.get(col_li_person, '#')})")
-        st.info(f"📋 **System Notes History:**\n\n {lead.get(col_notes, 'No history found.')}")
+        # Displaying historical notes as a reference
+        st.info(f"📋 **Cumulative History:**\n\n {lead.get(col_notes, 'No notes yet.')}")
 
     # Log Actions
     st.divider()
@@ -106,17 +121,19 @@ if mode == "Dialer":
     with c1:
         if st.button("✅ LOG & NEXT", type="primary", use_container_width=True):
             outcome = "Contact Made" if contact_made else "Outbound Call"
-            # Append notes logic: [Date]: Note | Old Notes
+            # CUMULATIVE NOTES LOGIC
             timestamp = datetime.now().strftime("%m/%d %H:%M")
-            combined_notes = f"[{timestamp}]: {new_note} | {lead.get(col_notes, '')}"
+            old_notes = str(lead.get(col_notes, "")) if not pd.isna(lead.get(col_notes)) else ""
+            combined_notes = f"[{timestamp}]: {new_note} | {old_notes}"
             
             df.at[orig_idx, col_notes] = combined_notes
             df.at[orig_idx, 'Rating'] = rating
             df.at[orig_idx, 'Last Touch'] = datetime.now().strftime("%Y-%m-%d")
             
-            # Log to Activity
+            # Append to Activity Log
             new_entry = pd.DataFrame([{"Timestamp": datetime.now(), "Lead Name": full_name, "Outcome": outcome, "Note": new_note, "Rating": rating, "User": "Alfonso"}])
-            safe_append_activity(activity_log, new_entry)
+            safe_append_activity(new_entry)
+            
             conn.update(data=df)
             st.session_state.index += 1
             st.rerun()
@@ -128,7 +145,7 @@ if mode == "Dialer":
     with c3:
         if st.button("💸 CLOSED DEAL", use_container_width=True):
             new_entry = pd.DataFrame([{"Timestamp": datetime.now(), "Lead Name": full_name, "Outcome": "Closed Deal", "Note": new_note, "Rating": "Hot", "User": "Alfonso"}])
-            safe_append_activity(activity_log, new_entry)
+            safe_append_activity(new_entry)
             st.balloons()
 
     with c4:
@@ -142,15 +159,16 @@ elif mode == "Dashboard":
     if not activity_log.empty:
         activity_log['Timestamp'] = pd.to_datetime(activity_log['Timestamp'])
         
-        k1, k2, k3 = st.columns(3)
+        k1, k2, k3, k4 = st.columns(4)
         k1.metric("Total Dials", len(activity_log))
         k2.metric("Contacts", len(activity_log[activity_log['Outcome'] == 'Contact Made']))
         k3.metric("Closed Deals", len(activity_log[activity_log['Outcome'] == 'Closed Deal']))
+        k4.metric("Appointments", len(activity_log[activity_log['Outcome'].str.contains('Appointment', na=False)]))
         
         st.divider()
-        st.subheader("Daily Activity")
+        st.subheader("Daily Activity Trend")
         daily = activity_log.set_index('Timestamp').resample('D').count()['Lead Name']
         st.line_chart(daily)
         st.dataframe(activity_log.sort_values('Timestamp', ascending=False), use_container_width=True)
     else:
-        st.info("No activity found in Activity_Log.")
+        st.info("Start dialing to see stats here.")
