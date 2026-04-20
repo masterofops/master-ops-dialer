@@ -126,25 +126,29 @@ with st.sidebar:
             if uploaded_file:
                 raw_data = pd.read_csv(uploaded_file, encoding='latin1', on_bad_lines='skip')
             elif pasted_data:
+                # Split by tabs for spreadsheet compatibility
                 rows = [line.split('\t') for line in pasted_data.strip().split('\n')]
-                raw_data = pd.DataFrame(rows)
+                
+                # Check if the first row is likely a header by checking for absence of '@'
                 if not any('@' in str(x) for x in rows[0]):
-                    raw_data.columns = [f"col_{i}" for i in range(len(rows[0]))]
+                    raw_data = pd.DataFrame(rows[1:], columns=rows[0])
                 else:
-                    raw_data.columns = rows[0]
-                    raw_data = raw_data[1:]
+                    raw_data = pd.DataFrame(rows)
+                    raw_data.columns = [f"col_{i}" for i in range(len(rows[0]))]
 
             if not raw_data.empty:
+                # Ensure new_batch has the correct columns from the current database
                 new_batch = pd.DataFrame(columns=df.columns)
                 
                 for master_col in df.columns:
-                    match = next((c for c in raw_data.columns if str(c).lower() == str(master_col).lower()), None)
+                    # Attempt exact match first
+                    match = next((c for c in raw_data.columns if str(c).lower().strip() == str(master_col).lower().strip()), None)
                     
                     if not match:
                         keywords = []
-                        if "Email" in master_col: keywords = ["email", "correo", "mail", "executive 1 direct email"]
-                        elif "First Name" in master_col: keywords = ["first name", "nombre", "executive 1 first name"]
-                        elif "Last Name" in master_col: keywords = ["last name", "apellido", "executive 1 last name"]
+                        if "Email" in master_col: keywords = ["email", "correo", "mail", "direct email", "@"]
+                        elif "First Name" in master_col: keywords = ["first name", "nombre", "first"]
+                        elif "Last Name" in master_col: keywords = ["last name", "apellido", "last"]
                         elif "Phone" in master_col: keywords = ["phone", "tel", "mobile", "direct"]
                         elif "Company" in master_col: keywords = ["company", "account", "firm", "empresa"]
                         
@@ -156,6 +160,7 @@ with st.sidebar:
                 new_batch = new_batch.dropna(how='all')
 
                 if not new_batch.empty:
+                    # Check for existing email column to avoid duplicates
                     if col_email and col_email in df.columns:
                         existing_emails = df[col_email].astype(str).str.lower().unique()
                         new_leads = new_batch[~new_batch[col_email].astype(str).str.lower().isin(existing_emails)]
@@ -163,12 +168,12 @@ with st.sidebar:
                         new_leads = new_batch
 
                     if not new_leads.empty:
+                        # Force all data to string to prevent GSheets serialization errors
+                        new_leads = new_leads.astype(str).replace('nan', '')
                         df = pd.concat([df, new_leads], ignore_index=True)
-                        df = df.reset_index(drop=True)
                         conn.update(data=df)
                         
-                        st.session_state.index = 0 
-                        st.success(f"Successfully injected {len(new_leads)} leads into your Master Structure.")
+                        st.success(f"Successfully injected {len(new_leads)} leads.")
                         st.cache_data.clear()
                         time.sleep(1)
                         st.rerun()
