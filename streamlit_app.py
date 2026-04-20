@@ -150,18 +150,65 @@ with st.sidebar:
                 rows = [line.split('\t') for line in pasted_data.strip().split('\n')]
                 raw_data = pd.DataFrame(rows)
                 if not any('@' in str(x) for x in rows[0]):
+                    raw_data.columns = [f"col_{i}" for i in range(len(rows[0]))]
+                else:
                     raw_data.columns = rows[0]
                     raw_data = raw_data[1:]
 
             if not raw_data.empty:
-                # 1. Create empty template with the Master Structure
-                mapped_df = pd.DataFrame(columns=MASTER_COLUMNS)
+                # 1. Create a container that matches your EXACT Master Sheet structure
+                new_batch = pd.DataFrame(columns=df.columns)
                 
-                # 2. Define internal helper for fuzzy matching
-                def find_and_fill(target_col, keywords):
-                    source_col = next((c for c in raw_data.columns if any(k.lower() in str(c).lower() for k in keywords)), None)
-                    if source_col:
-                        mapped_df[target_col] = raw_data[source_col]
+                # 2. Map Raw Data to Master Columns
+                # We look at every column in YOUR MASTER SHEET and try to find a match in the UPLOAD
+                for master_col in df.columns:
+                    # Look for the best match in the uploaded file
+                    # It checks for exact names, then partial keywords
+                    match = next((c for c in raw_data.columns if str(c).lower() == str(master_col).lower()), None)
+                    
+                    if not match:
+                        # Fallback: Fuzzy search for common industrial/Apollo variations
+                        keywords = []
+                        if "Email" in master_col: keywords = ["email", "correo", "mail", "executive 1 direct email"]
+                        elif "First Name" in master_col: keywords = ["first name", "nombre", "executive 1 first name"]
+                        elif "Last Name" in master_col: keywords = ["last name", "apellido", "executive 1 last name"]
+                        elif "Phone" in master_col: keywords = ["phone", "tel", "mobile", "direct"]
+                        elif "Company" in master_col: keywords = ["company", "account", "firm", "empresa"]
+                        
+                        match = next((c for c in raw_data.columns if any(k in str(c).lower() for k in keywords)), None)
+                    
+                    if match:
+                        new_batch[master_col] = raw_data[match]
+
+                # 3. Clean up the new batch (remove empty rows)
+                new_batch = new_batch.dropna(how='all')
+
+                # 4. Deduplication & Merge
+                # We use the existing 'Email' column as the anchor
+                if not new_batch.empty:
+                    if col_email and col_email in df.columns:
+                        existing_emails = df[col_email].astype(str).str.lower().unique()
+                        new_leads = new_batch[~new_batch[col_email].astype(str).str.lower().isin(existing_emails)]
+                    else:
+                        new_leads = new_batch
+
+                    if not new_leads.empty:
+                        # Direct append to your existing dataframe
+                        df = pd.concat([df, new_leads], ignore_index=True)
+                        
+                        # 5. Save and Reset
+                        df = df.reset_index(drop=True)
+                        conn.update(data=df)
+                        
+                        st.session_state.index = 0 
+                        st.success(f"Successfully injected {len(new_leads)} leads into your Master Structure.")
+                        st.cache_data.clear()
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.warning("No new leads to add (all were duplicates).")
+        except Exception as e:
+            st.error(f"Injection Error: {e}")
 
                 # 3. Execution (Priority Mapping)
                 find_and_fill("First Name", ["executive 1 first name", "first name", "nombre"])
