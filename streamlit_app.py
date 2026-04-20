@@ -280,22 +280,31 @@ if mode == "Dialer":
         else:
             st.error("No email found")
         
-        # Ratios
-        con_to_appt = (appts / contacts * 100) if contacts > 0 else 0
-        dial_to_close = (closed / dials * 100) if dials > 0 else 0
+        elif mode == "Dashboard":
+    st.title("📊 Performance Dashboard")
+    
+    if not activity_log.empty:
+        # Define the variables that were missing
+        dials = len(activity_log)
+        contacts = len(activity_log[activity_log['Outcome'].str.contains("Contact Made", na=False)])
+        appts = len(activity_log[activity_log['Outcome'].str.contains("Scheduled|Zcal|G-Cal", na=False)])
+        closed = len(activity_log[activity_log['Outcome'] == "Closed Deal"])
 
         # KPI Tiles
         k1, k2, k3, k4 = st.columns(4)
-        k1.metric("Dials", dials)
-        k2.metric("Contact %", f"{(contacts/dials*100 if dials>0 else 0):.1f}%")
-        k3.metric("Appts", appts)
-        k4.metric("Deals", closed)
+        k1.metric("Total Dials", dials)
+        k2.metric("Contacts", contacts)
+        k3.metric("Appointments", appts)
+        k4.metric("Closures", closed)
 
         st.divider()
-        st.subheader("Performance Ratios")
-        r1, r2 = st.columns(2)
-        r1.metric("Contact to Appointment", f"{con_to_appt:.1f}%")
-        r2.metric("Dial to Close", f"{dial_to_close:.1f}%")
+        st.subheader("Daily Activity")
+        # Fix for the chart
+        activity_log['Timestamp'] = pd.to_datetime(activity_log['Timestamp'])
+        chart_data = activity_log.set_index('Timestamp').resample('D').count()['Lead Name']
+        st.area_chart(chart_data)
+    else:
+        st.info("No activity logged yet. Start dialing to see stats!")
 
         # Graph Fix
         st.subheader("Daily Activity Volume")
