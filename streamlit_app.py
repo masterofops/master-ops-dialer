@@ -153,6 +153,23 @@ if mode == "Dialer":
         st.session_state.index += move
         st.rerun()
 
+# --- THIS IS THE FIX ---
+    # These lines must be aligned with "def log_action"
+    st.write("---")
+    cx, cy = st.columns(2)
+    if cx.button("🔵 Log LinkedIn Message", use_container_width=True):
+        log_action("LinkedIn Sent", step=0)
+    if cy.button("📧 Log Manual Email", use_container_width=True):
+        log_action("Email Sent", step=0)
+    
+    st.divider()
+    c1, c2, c3, c4, c5 = st.columns(5)
+    with c1:
+        if st.button("⬅️ PREVIOUS", use_container_width=True):
+            if st.session_state.index > 0:
+                st.session_state.index -= 1
+                st.rerun()
+                
 for col in df.columns:
             if "linkedin" in col.lower() or "profile" in col.lower():
                 url = lead.get(col, '')
