@@ -219,9 +219,9 @@ with st.sidebar:
     find_and_fill("# Employees", ["total employees", "employees", "# employees"])
     
     # 4. Auto-fill remaining columns that match exact names
-    for col in MASTER_COLUMNS:
-        if col not in mapped_df.columns or mapped_df[col].isnull().all():
-            find_and_fill(col, [col])
+                for col in MASTER_COLUMNS:
+                    if col not in mapped_df.columns or mapped_df[col].isnull().all():
+                        find_and_fill(col, [col])
 
                 # 5. Merge with existing database (Anchor on Email)
                 m_email = "Email"
