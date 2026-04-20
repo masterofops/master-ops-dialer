@@ -308,17 +308,27 @@ if mode == "Dialer":
     with c5:
         email_val = lead.get(col_email, '')
         if pd.notna(email_val) and "@" in str(email_val):
+            # Desktop Mail
             st.link_button("✉️ DESKTOP MAIL", f"mailto:{email_val}", use_container_width=True)
             
-            # Create Google Calendar Link (30 min default)
+            # --- GOOGLE CALENDAR APPOINTMENT ---
+            # Define variables FIRST to ensure they exist for the f-string
+            safe_comp = lead.get(col_comp, 'Lead')
+            safe_notes = lead.get(col_notes, '')
+            subject = urllib.parse.quote(f"Clarity Call: Master of Ops x {safe_comp}")
+            details = urllib.parse.quote(f"Meeting with {full_name}\nEmail: {email_val}\nNotes: {safe_notes}")
+
+            # Now build the link
             gcal_link = f"https://www.google.com/calendar/render?action=TEMPLATE&text={subject}&details={details}"
             if pd.notna(email_val):
                 gcal_link += f"&add={email_val}"
             
-            # Use link_button instead of st.components to avoid pop-up blockers
-            st.link_button("📅 SCHEDULE G-CAL", gcal_link, use_container_width=True)
-            
+            # Reverting to your button logic to keep it consistent with your workflow
+            if st.button("📅 SCHEDULE G-CAL", use_container_width=True):
+                st.components.v1.html(f"<script>window.open('{gcal_link}', '_blank');</script>", height=0)
+                log_action("G-Cal Invite Prepared", step=0)
         else:
+            # This handles the case where the email is missing
             st.error("No email found")
 
 elif mode == "Lead Manager":
