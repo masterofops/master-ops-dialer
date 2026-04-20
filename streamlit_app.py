@@ -132,7 +132,7 @@ if mode == "Dialer":
         
         st.info(f"📋 **Static Sheet Notes:**\n\n {lead.get(col_notes, 'None')}")
 
-    def log_action(outcome, step=1):
+  def log_action(outcome, step=1):
         move = step if dial_dir == "Top to Bottom" else -step
         ts = datetime.now().strftime("%m/%d %H:%M")
         old = str(lead.get(col_notes, "")) if not pd.isna(lead.get(col_notes)) else ""
@@ -153,8 +153,7 @@ if mode == "Dialer":
         st.session_state.index += move
         st.rerun()
 
-# --- THIS IS THE FIX ---
-    # These lines must be aligned with "def log_action"
+    # --- ACTION BUTTONS (Aligned with def log_action) ---
     st.write("---")
     cx, cy = st.columns(2)
     if cx.button("🔵 Log LinkedIn Message", use_container_width=True):
@@ -164,47 +163,36 @@ if mode == "Dialer":
     
     st.divider()
     c1, c2, c3, c4, c5 = st.columns(5)
+    
     with c1:
-        if st.button("⬅️ PREVIOUS", use_container_width=True):
-            if st.session_state.index > 0:
-                st.session_state.index -= 1
-                st.rerun()
-                
-for col in df.columns:
-            if "linkedin" in col.lower() or "profile" in col.lower():
-                url = lead.get(col, '')
-                if pd.notna(url) and str(url).startswith('http'):
-                    st.write(f"👤 **{col}:** [View Profile]({url})")
-
-for col in df.columns:
-            if any(k in col.lower() for k in ["phone", "tel", "mobile", "celular"]):
-                p_val = lead.get(col, '')
-                if pd.notna(p_val) and str(p_val).strip() != '':
-                    st.link_button(f"📲 {col}: {p_val}", f"tel:{re.sub(r'\D', '', str(p_val))}", use_container_width=True)
-                    
-# Ensure this is inside 'if mode == "Dialer":'
-    st.write("---")
-    cx, cy = st.columns(2)
-    if cx.button("🔵 Log LinkedIn Message", use_container_width=True):
-        log_action("LinkedIn Sent", step=0)
-    if cy.button("📧 Log Manual Email", use_container_width=True):
-        log_action("Email Sent", step=0)
-    
-    st.divider()
-    c1, c2, c3, c4, c5 = st.columns(5)
-    with c1:  # Fix the indentation here
         if st.button("⬅️ PREVIOUS", use_container_width=True):
             if st.session_state.index > 0:
                 st.session_state.index -= 1
                 st.rerun()
             else:
                 st.toast("⚠️ You are at the first lead.")
-    # ... repeat for c2, c3, c4 ...
-    with c5:  # Fix the indentation here
+                
+    with c2:
+        if st.button("✅ LOG & NEXT", type="primary", use_container_width=True):
+            log_action("Contact Made" if contact_made else "Outbound Call")
+            
+    with c3:
+        cal_url = f"https://www.google.com/calendar/render?action=TEMPLATE&text={urllib.parse.quote('Appt: ' + full_name)}"
+        if st.button("📅 APPOINTMENT", use_container_width=True):
+            log_action("Appointment Scheduled", step=0)
+            st.markdown(f'<meta http-equiv="refresh" content="0;URL=\'{cal_url}\' \">', unsafe_allow_html=True)
+            
+    with c4:
+        if st.button("💸 CLOSED", use_container_width=True):
+            st.balloons()
+            log_action("Closed Deal")
+            
+    with c5:
         email_addr = lead.get(col_email, '')
         if st.button("✉️ EMAIL", use_container_width=True):
             log_action("Email Sent", step=0)
             st.markdown(f'<meta http-equiv="refresh" content="0;URL=\'mailto:{email_addr}\' \">', unsafe_allow_html=True)
+
 # --- MODE: DASHBOARD ---
 elif mode == "Dashboard":
     st.title("📊 Master of Ops Execution Dashboard")
