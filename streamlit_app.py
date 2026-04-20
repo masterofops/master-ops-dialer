@@ -44,18 +44,6 @@ li_cols = get_cols(df, ["linkedin", "profile", "li-"])
 col_email = get_cols(df, ["email", "@", "correo"])[0] if get_cols(df, ["email", "@"]) else None
 col_notes = get_cols(df, ["notes", "comment", "history", "notas"])[0] if get_cols(df, ["notes", "comment"]) else "Notes"
 
-for col in df.columns:
-            if "linkedin" in col.lower() or "profile" in col.lower():
-                url = lead.get(col, '')
-                if pd.notna(url) and str(url).startswith('http'):
-                    st.write(f"👤 **{col}:** [View Profile]({url})")
-
-for col in df.columns:
-            if any(k in col.lower() for k in ["phone", "tel", "mobile", "celular"]):
-                p_val = lead.get(col, '')
-                if pd.notna(p_val) and str(p_val).strip() != '':
-                    st.link_button(f"📲 {col}: {p_val}", f"tel:{re.sub(r'\D', '', str(p_val))}", use_container_width=True)
-
 # --- SIDEBAR ---
 with st.sidebar:
     st.title("MASTER OF OPS")
@@ -135,11 +123,12 @@ if mode == "Dialer":
 
     with col_r:
         st.markdown("### 🧠 Intelligence")
-        st.write(f"🌐 **Email:** {lead.get(col_email, 'N/A')}")
-        for l_col in li_cols:
-            l_val = lead.get(l_col, '')
-            if pd.notna(l_val) and str(l_val).startswith('http'):
-                st.write(f"👤 **{l_col}:** [View Profile]({l_val})")
+        # PASTE THIS HERE:
+        for col in df.columns:
+            if "linkedin" in col.lower() or "profile" in col.lower():
+                url = lead.get(col, '')
+                if pd.notna(url) and str(url).startswith('http'):
+                    st.write(f"👤 **{col}:** [View Profile]({url})")
         
         st.info(f"📋 **Static Sheet Notes:**\n\n {lead.get(col_notes, 'None')}")
 
@@ -164,6 +153,18 @@ if mode == "Dialer":
         st.session_state.index += move
         st.rerun()
 
+for col in df.columns:
+            if "linkedin" in col.lower() or "profile" in col.lower():
+                url = lead.get(col, '')
+                if pd.notna(url) and str(url).startswith('http'):
+                    st.write(f"👤 **{col}:** [View Profile]({url})")
+
+for col in df.columns:
+            if any(k in col.lower() for k in ["phone", "tel", "mobile", "celular"]):
+                p_val = lead.get(col, '')
+                if pd.notna(p_val) and str(p_val).strip() != '':
+                    st.link_button(f"📲 {col}: {p_val}", f"tel:{re.sub(r'\D', '', str(p_val))}", use_container_width=True)
+                    
 # Ensure this is inside 'if mode == "Dialer":'
     st.write("---")
     cx, cy = st.columns(2)
