@@ -324,7 +324,7 @@ elif mode == "Dashboard":
         k4.metric("Closures", closed)
 
         st.divider()
-       activity_log['Timestamp'] = pd.to_datetime(activity_log['Timestamp'], errors='coerce')
+    activity_log['Timestamp'] = pd.to_datetime(activity_log['Timestamp'], errors='coerce')
        activity_log = activity_log.dropna(subset=['Timestamp'])
         chart_data = activity_log.set_index('Timestamp').resample('D').count()['Lead Name']
         st.subheader("Daily Activity Volume")
