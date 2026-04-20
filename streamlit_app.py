@@ -83,7 +83,7 @@ with st.sidebar:
     # Option 2: Copy-Paste Contacts
     pasted_data = st.text_area("Or paste emails here (one per line):")
 
-   if st.button("Add to Master List"):
+    if st.button("Add to Master List"):
         try:
             new_entries = pd.DataFrame()
             
