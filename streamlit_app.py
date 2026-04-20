@@ -211,14 +211,14 @@ with st.sidebar:
             st.error(f"Injection Error: {e}")
 
                 # 3. Execution (Priority Mapping)
-                    find_and_fill("First Name", ["executive 1 first name", "first name", "nombre"])
-                    find_and_fill("Last Name", ["executive 1 last name", "last name", "apellido"])
-                    find_and_fill("Email", ["executive 1 direct email", "primary email", "email", "@"])
-                    find_and_fill("Title", ["executive 1 title", "title", "role"])
-                    find_and_fill("Work Direct Phone", ["executive 1 direct phone", "work direct phone", "phone"])
-                    find_and_fill("Company Name", ["company name", "company", "account"])
-                    find_and_fill("Annual Revenue", ["annual sales", "annual revenue", "max sales"])
-                    find_and_fill("# Employees", ["total employees", "employees", "# employees"])
+                find_and_fill("First Name", ["executive 1 first name", "first name", "nombre"])
+                find_and_fill("Last Name", ["executive 1 last name", "last name", "apellido"])                    
+                find_and_fill("Email", ["executive 1 direct email", "primary email", "email", "@"])
+                find_and_fill("Title", ["executive 1 title", "title", "role"])
+                find_and_fill("Work Direct Phone", ["executive 1 direct phone", "work direct phone", "phone"])
+                find_and_fill("Company Name", ["company name", "company", "account"])
+                find_and_fill("Annual Revenue", ["annual sales", "annual revenue", "max sales"])
+                find_and_fill("# Employees", ["total employees", "employees", "# employees"])
                 
                 # 4. Auto-fill remaining columns that match exact names
                 for col in MASTER_COLUMNS:
