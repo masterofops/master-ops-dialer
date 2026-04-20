@@ -325,7 +325,7 @@ elif mode == "Dashboard":
 
         st.divider()
        activity_log['Timestamp'] = pd.to_datetime(activity_log['Timestamp'], errors='coerce')
-activity_log = activity_log.dropna(subset=['Timestamp'])
+       activity_log = activity_log.dropna(subset=['Timestamp'])
         chart_data = activity_log.set_index('Timestamp').resample('D').count()['Lead Name']
         st.subheader("Daily Activity Volume")
         st.area_chart(chart_data)
