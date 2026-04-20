@@ -280,13 +280,6 @@ if mode == "Dialer":
         else:
             st.error("No email found")
 
-        st.divider()
-        
-            # Graph Fix
-        st.subheader("Daily Activity Volume")
-        chart_data = f_log.set_index('Timestamp').resample('D').count()['Lead Name']
-        st.area_chart(chart_data)
-
 elif mode == "Lead Manager":
     st.title("🗂️ Search & Filter Database")
     search_query = st.text_input("Filter by Name, Company, or Status...")
@@ -299,7 +292,7 @@ elif mode == "Lead Manager":
     st.write(f"Showing {len(filtered_df)} leads")
     st.dataframe(filtered_df, use_container_width=True)
 
-    elif mode == "Dashboard":
+elif mode == "Dashboard":
     st.title("📊 Performance Dashboard")
     if not activity_log.empty:
         dials = len(activity_log)
