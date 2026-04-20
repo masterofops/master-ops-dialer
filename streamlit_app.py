@@ -86,46 +86,52 @@ with st.sidebar:
     if st.button("Add to Master List"):
         try:
             new_entries = pd.DataFrame()
-            
             if uploaded_file:
                 new_entries = pd.read_csv(uploaded_file, encoding='latin1', on_bad_lines='skip')
             elif pasted_data:
-                # Logic: Check if it's a table (tabs) or just a list (newlines)
+                # Detect if pasted data is a table (Excel/LinkedIn) or just list
                 rows = [line.split('\t') for line in pasted_data.strip().split('\n')]
                 if len(rows[0]) > 1:
-                    # If it's a table, create a temp DF and let the smart mapper find columns
                     temp_df = pd.DataFrame(rows)
-                    # We look for email to identify which column is which
-                    for i in range(len(temp_df.columns)):
-                        if temp_df[i].str.contains('@').any():
-                            temp_df = temp_df.rename(columns={i: col_email})
+                    # Try to find headers in first row, else use Master Sheet columns
+                    if any('@' in str(x) for x in rows[0]): # No header row
+                        temp_df.columns = df.columns[:len(temp_df.columns)]
+                    else:
+                        temp_df.columns = rows[0]
+                        temp_df = temp_df[1:] # Drop header row
                     new_entries = temp_df
                 else:
-                    # Just a single list of emails
-                    emails = [e.strip() for e in pasted_data.split('\n') if '@' in e]
-                    new_entries = pd.DataFrame({col_email: emails})
+                    new_entries = pd.DataFrame({col_email: [r[0].strip() for r in rows if '@' in r[0]]})
 
             if not new_entries.empty:
-                # SMART MAP: Rename columns in pasted data to match Master Sheet if they look similar
-                for new_col in new_entries.columns:
-                    for master_col in df.columns:
-                        if str(new_col).lower() == str(master_col).lower():
-                            new_entries = new_entries.rename(columns={new_col: master_col})
-
-                # Keep only relevant columns and merge
-                valid_cols = new_entries.columns.intersection(df.columns)
-                new_entries = new_entries[valid_cols]
+                # Standardize columns to match Master
+                new_entries.columns = [c.strip() for c in new_entries.columns]
                 
-                updated_df = pd.concat([df, new_entries], ignore_index=True)
-                if col_email in updated_df.columns:
-                    updated_df = updated_df.drop_duplicates(subset=[col_email], keep='first')
+                # Merge logic: Email is the Anchor
+                if col_email in new_entries.columns and col_email in df.columns:
+                    # Identify existing vs new
+                    existing_emails = df[col_email].unique()
+                    updates = new_entries[new_entries[col_email].isin(existing_emails)]
+                    additions = new_entries[~new_entries[col_email].isin(existing_emails)]
+                    
+                    # Update existing leads (Enrichment)
+                    for _, row in updates.iterrows():
+                        idx = df[df[col_email] == row[col_email]].index[0]
+                        for col in row.index:
+                            if col in df.columns and pd.notna(row[col]):
+                                df.at[idx, col] = row[col]
+                    
+                    # Add brand new leads
+                    if not additions.empty:
+                        df = pd.concat([df, additions], ignore_index=True)
                 
-                conn.update(data=updated_df)
-                st.success("List Synced & Parsed!")
+                conn.update(data=df)
+                st.success(f"Processed {len(new_entries)} leads. Duplicates enriched, new leads added.")
                 st.cache_data.clear()
+                time.sleep(1)
                 st.rerun()
         except Exception as e:
-            st.error(f"Upload Error: {e}")
+            st.error(f"Logic Error: {e}")
             
 # --- MODE: DIALER ---
 if mode == "Dialer":
@@ -169,8 +175,7 @@ if mode == "Dialer":
         
         st.info(f"📋 **Static Sheet Notes:**\n\n {lead.get(col_notes, 'None')}")
 
-    def log_action(outcome, step=1):
-        move = step if dial_dir == "Top to Bottom" else -step
+    def log_action(outcome, step=0): # Default step to 0 so it doesn't move unless told
         ts = datetime.now().strftime("%m/%d %H:%M")
         old = str(lead.get(col_notes, "")) if not pd.isna(lead.get(col_notes)) else ""
         
@@ -185,10 +190,11 @@ if mode == "Dialer":
             current_log = conn.read(worksheet="Activity_Log", ttl=0).copy()
             conn.update(worksheet="Activity_Log", data=pd.concat([current_log, entry], ignore_index=True))
         except:
-            conn.create(worksheet="Activity_Log", data=entry)
+            conn.update(worksheet="Activity_Log", data=entry)
         
-        st.session_state.index += move
-        st.rerun()
+        if step != 0:
+            st.session_state.index += step
+            st.rerun()
 
     # --- ACTION BUTTONS ---
     st.write("---")
@@ -212,20 +218,21 @@ if mode == "Dialer":
 
     with c2:
         if st.button("✅ LOG & NEXT", type="primary", use_container_width=True):
-            log_action("Contact Made" if contact_made else "Outbound Call")
+            move_val = 1 if dial_dir == "Top to Bottom" else -1
+            log_action("Contact Made" if contact_made else "Outbound Call", step=move_val)
 
     with c3:
-        # Zcal Option
         zcal_url = "https://zcal.co/masterofops/clarity"
-        if st.button("🔗 ZCAL", use_container_width=True):
+        # We use a unique key for every lead to prevent button state conflicts
+        if st.button("🔗 ZCAL", key=f"zcal_{st.session_state.index}", use_container_width=True):
             log_action("Zcal Link Sent", step=0)
             st.components.v1.html(f"<script>window.open('{zcal_url}', '_blank');</script>", height=0)
         
-        # Google Calendar Option
         cal_link = f"https://www.google.com/calendar/render?action=TEMPLATE&text={urllib.parse.quote('Appt: ' + full_name)}"
-        if st.button("📅 G-CAL", use_container_width=True):
+        if st.button("📅 G-CAL", key=f"gcal_{st.session_state.index}", use_container_width=True):
             log_action("G-Cal Scheduled", step=0)
             st.components.v1.html(f"<script>window.open('{cal_link}', '_blank');</script>", height=0)
+            
     with c4:
         if st.button("💸 CLOSED", use_container_width=True):
             st.balloons()
@@ -234,25 +241,23 @@ if mode == "Dialer":
     with c5:
         email_val = lead.get(col_email, '')
         if pd.notna(email_val) and "@" in str(email_val):
-            # Option 1: Local Email Client (Desktop App)
-            if st.button("✉️ DESKTOP MAIL", use_container_width=True):
+            # DESKTOP MAIL FIX
+            if st.button("✉️ DESKTOP MAIL", key=f"desk_{st.session_state.index}", use_container_width=True):
                 log_action("Email Sent (Local)", step=0)
-                mailto_link = f"mailto:{email_val}"
+                # We use a hidden anchor click for local mail clients
                 st.components.v1.html(f"""
                     <script>
-                        var link = document.createElement('a');
-                        link.href = '{mailto_link}';
-                        link.click();
+                        var a = document.createElement('a');
+                        a.href = 'mailto:{email_val}';
+                        a.click();
                     </script>
                 """, height=0)
 
-            # Option 2: Gmail Web Redirect
-            if st.button("🌐 GMAIL WEB", use_container_width=True):
+            # GMAIL WEB FIX
+            if st.button("🌐 GMAIL WEB", key=f"gmail_{st.session_state.index}", use_container_width=True):
                 log_action("Email Sent (Gmail)", step=0)
                 gmail_url = f"https://mail.google.com/mail/?view=cm&fs=1&to={email_val}"
                 st.components.v1.html(f"<script>window.open('{gmail_url}', '_blank');</script>", height=0)
-        else:
-            st.error("No valid email found.")
 
 # --- MODE: DASHBOARD ---
 elif mode == "Dashboard":
