@@ -74,7 +74,7 @@ with st.sidebar:
         st.session_state.index = len(df) - 1
         st.rerun()
 
- st.divider()
+    st.divider()
     st.subheader("📤 Lead Enrichment")
     
     # Option 1: File Upload
