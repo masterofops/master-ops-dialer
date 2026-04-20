@@ -164,9 +164,8 @@ if mode == "Dialer":
         rating = st.selectbox("Rating", ["Cold", "Warm", "Hot"], index=1)
         new_note = st.text_area("Live Call Notes", key=f"note_{st.session_state.index}")
 
-   with col_r:
+    with col_r:
         st.markdown("### 🧠 Intelligence")
-        
         # --- A. MULTI-CONTACT RELATABILITY ---
         if col_comp and pd.notna(lead.get(col_comp)):
             company_name = lead.get(col_comp)
