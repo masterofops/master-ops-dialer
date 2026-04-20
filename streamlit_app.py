@@ -132,7 +132,7 @@ if mode == "Dialer":
         
         st.info(f"📋 **Static Sheet Notes:**\n\n {lead.get(col_notes, 'None')}")
 
-  def log_action(outcome, step=1):
+      def log_action(outcome, step=1):
         move = step if dial_dir == "Top to Bottom" else -step
         ts = datetime.now().strftime("%m/%d %H:%M")
         old = str(lead.get(col_notes, "")) if not pd.isna(lead.get(col_notes)) else ""
