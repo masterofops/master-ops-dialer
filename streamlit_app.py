@@ -183,47 +183,45 @@ with st.sidebar:
                 # 3. Clean up the new batch (remove empty rows)
                 new_batch = new_batch.dropna(how='all')
 
-                # 4. Deduplication & Merge
-                # We use the existing 'Email' column as the anchor
-                if not new_batch.empty:
-                    if col_email and col_email in df.columns:
-                        existing_emails = df[col_email].astype(str).str.lower().unique()
-                        new_leads = new_batch[~new_batch[col_email].astype(str).str.lower().isin(existing_emails)]
-                    else:
-                        new_leads = new_batch
+              if not new_batch.empty:
+            if col_email and col_email in df.columns:
+                existing_emails = df[col_email].astype(str).str.lower().unique()
+                new_leads = new_batch[~new_batch[col_email].astype(str).str.lower().isin(existing_emails)]
+            else:
+                new_leads = new_batch
 
-                    if not new_leads.empty:
-                        # Direct append to your existing dataframe
-                        df = pd.concat([df, new_leads], ignore_index=True)
-                        
-                        # 5. Save and Reset
-                        df = df.reset_index(drop=True)
-                        conn.update(data=df)
-                        
-                        st.session_state.index = 0 
-                        st.success(f"Successfully injected {len(new_leads)} leads into your Master Structure.")
-                        st.cache_data.clear()
-                        time.sleep(1)
-                        st.rerun()
-                    else:
-                        st.warning("No new leads to add (all were duplicates).")
-        except Exception as e:
-            st.error(f"Injection Error: {e}")
-
-                # 3. Execution (Priority Mapping)
-                    find_and_fill("First Name", ["executive 1 first name", "first name", "nombre"])
-                    find_and_fill("Last Name", ["executive 1 last name", "last name", "apellido"])                    
-                    find_and_fill("Email", ["executive 1 direct email", "primary email", "email", "@"])
-                    find_and_fill("Title", ["executive 1 title", "title", "role"])
-                    find_and_fill("Work Direct Phone", ["executive 1 direct phone", "work direct phone", "phone"])
-                    find_and_fill("Company Name", ["company name", "company", "account"])
-                    find_and_fill("Annual Revenue", ["annual sales", "annual revenue", "max sales"])
-                    find_and_fill("# Employees", ["total employees", "employees", "# employees"])
+            if not new_leads.empty:
+                # Direct append to your existing dataframe
+                df = pd.concat([df, new_leads], ignore_index=True)
                 
-                # 4. Auto-fill remaining columns that match exact names
-                for col in MASTER_COLUMNS:
-                    if col not in mapped_df.columns or mapped_df[col].isnull().all():
-                        find_and_fill(col, [col])
+                # 5. Save and Reset
+                df = df.reset_index(drop=True)
+                conn.update(data=df)
+                
+                st.session_state.index = 0 
+                st.success(f"Successfully injected {len(new_leads)} leads into your Master Structure.")
+                st.cache_data.clear()
+                time.sleep(1)
+                st.rerun()
+            else:
+                st.warning("No new leads to add (all were duplicates).")
+    except Exception as e:
+        st.error(f"Injection Error: {e}")
+
+    # 3. Execution (Priority Mapping)
+    find_and_fill("First Name", ["executive 1 first name", "first name", "nombre"])
+    find_and_fill("Last Name", ["executive 1 last name", "last name", "apellido"])                    
+    find_and_fill("Email", ["executive 1 direct email", "primary email", "email", "@"])
+    find_and_fill("Title", ["executive 1 title", "title", "role"])
+    find_and_fill("Work Direct Phone", ["executive 1 direct phone", "work direct phone", "phone"])
+    find_and_fill("Company Name", ["company name", "company", "account"])
+    find_and_fill("Annual Revenue", ["annual sales", "annual revenue", "max sales"])
+    find_and_fill("# Employees", ["total employees", "employees", "# employees"])
+    
+    # 4. Auto-fill remaining columns that match exact names
+    for col in MASTER_COLUMNS:
+        if col not in mapped_df.columns or mapped_df[col].isnull().all():
+            find_and_fill(col, [col])
 
                 # 5. Merge with existing database (Anchor on Email)
                 m_email = "Email"
