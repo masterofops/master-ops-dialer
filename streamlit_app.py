@@ -306,31 +306,31 @@ if mode == "Dialer":
                 """, height=0)
 
             # GMAIL WEB FIX
+            with c5:
+        email_val = lead.get(col_email, '')
+        if pd.notna(email_val) and "@" in str(email_val):
+            
+            # 1. DESKTOP MAIL
+            if st.button("✉️ DESKTOP MAIL", key=f"desk_{st.session_state.index}", use_container_width=True):
+                # Trigger window open first
+                st.components.v1.html(f"""
+                    <script>
+                        var a = document.createElement('a');
+                        a.href = 'mailto:{email_val}';
+                        a.click();
+                    </script>
+                """, height=0)
+                # Then log the action
+                log_action("Email Sent (Local)", step=0)
+
+            # 2. GMAIL WEB
             if st.button("🌐 GMAIL WEB", key=f"gmail_{st.session_state.index}", use_container_width=True):
-                log_action("Email Sent (Gmail)", step=0)
                 gmail_url = f"https://mail.google.com/mail/?view=cm&fs=1&to={email_val}"
+                # Trigger window open BEFORE the slow Sheets update
                 st.components.v1.html(f"<script>window.open('{gmail_url}', '_blank');</script>", height=0)
-
-# --- MODE: DASHBOARD ---
-elif mode == "Dashboard":
-    st.title("📊 Master of Ops Execution Dashboard")
-    if not activity_log.empty:
-        activity_log['Timestamp'] = pd.to_datetime(activity_log['Timestamp'], errors='coerce')
-        
-        # Date Range Picker
-        c_date1, c_date2 = st.columns(2)
-        start_date = c_date1.date_input("From", datetime.now() - timedelta(days=30))
-        end_date = c_date2.date_input("To", datetime.now())
-        
-        # Filter Data
-        mask = (activity_log['Timestamp'].dt.date >= start_date) & (activity_log['Timestamp'].dt.date <= end_date)
-        f_log = activity_log.loc[mask]
-
-        # Calculation Engine
-        dials = len(f_log)
-        contacts = len(f_log[f_log['Outcome'].str.contains('Contact', na=False)])
-        appts = len(f_log[f_log['Outcome'].str.contains('Appt', na=False)])
-        closed = len(f_log[f_log['Outcome'].str.contains('Closed', na=False)])
+                log_action("Email Sent (Gmail)", step=0)
+        else:
+            st.error("No valid email found.")
         
         # Ratios
         con_to_appt = (appts / contacts * 100) if contacts > 0 else 0
